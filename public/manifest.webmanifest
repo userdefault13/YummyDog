@@ -1,0 +1,17 @@
+{
+  "name": "YummyDog",
+  "short_name": "YummyDog",
+  "description": "Order fresh hot dogs from your phone",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff8e7",
+  "theme_color": "#e63946",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

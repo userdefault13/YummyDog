@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-red: #e63946;
+  --color-brand-red-dark: #c1121f;
+  --color-brand-mustard: #ffb703;
+  --color-brand-mustard-light: #ffd166;
+  --color-brand-cream: #fff8e7;
+  --color-brand-charcoal: #1d1d1d;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--color-brand-cream);
+  color: var(--color-brand-charcoal);
+  -webkit-font-smoothing: antialiased;
+}
