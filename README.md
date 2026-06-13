@@ -18,7 +18,9 @@ Sign in at `/admin/login`
 - **Accounting** — Revenue, expenses, net profit; record business expenses
 - **Stats** — Today's revenue/orders, averages, top sellers
 
-Data persists in **MongoDB** for orders and transactions. Expenses remain in browser `localStorage`. Admin auth uses `sessionStorage`.
+Data persists in **MongoDB** for orders, transactions, expenses, inventory, and equipment. Projector assumptions remain in browser `localStorage`. Admin auth uses `sessionStorage`.
+
+On first load after this update, any existing expense/inventory/equipment data in `localStorage` is migrated into MongoDB automatically when those collections are empty.
 
 ## MongoDB
 
@@ -26,7 +28,10 @@ Add your connection string to `.env`:
 
 ```env
 MONGODB_URI=mongodb://127.0.0.1:27017/yummydog
+# Or Atlas: mongodb+srv://user:pass@cluster.mongodb.net/yummydog
 ```
+
+The app uses database **`yummydog`** (override with `MONGODB_DB_NAME`). Collections are created on server start: `orders`, `transactions`, `expenses`, `inventory`, `equipment`, `counters`.
 
 Or use a [MongoDB Atlas](https://www.mongodb.com/atlas) URI. Restart the dev server after changing `.env`.
 

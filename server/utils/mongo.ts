@@ -26,7 +26,7 @@ async function closeMongo(): Promise<void> {
   globalThis.__yummydogMongo = undefined
 }
 
-async function connectMongo(uri: string): Promise<{ client: MongoClient; db: Db }> {
+async function connectMongo(uri: string, dbName: string): Promise<{ client: MongoClient; db: Db }> {
   const client = new MongoClient(uri, {
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 10_000,
@@ -35,8 +35,9 @@ async function connectMongo(uri: string): Promise<{ client: MongoClient; db: Db 
     maxIdleTimeMS: 60_000,
   })
   await client.connect()
-  await client.db().admin().ping()
-  return { client, db: client.db() }
+  const db = client.db(dbName)
+  await db.command({ ping: 1 })
+  return { client, db }
 }
 
 export async function resetMongoConnection(): Promise<void> {
@@ -46,6 +47,7 @@ export async function resetMongoConnection(): Promise<void> {
 export async function getDb(): Promise<Db> {
   const config = useRuntimeConfig()
   const uri = config.mongodbUri
+  const dbName = config.mongodbDbName || 'yummydog'
 
   if (!uri) {
     throw createError({
@@ -56,7 +58,7 @@ export async function getDb(): Promise<Db> {
 
   if (globalThis.__yummydogMongo) {
     try {
-      await globalThis.__yummydogMongo.db.admin().ping()
+      await globalThis.__yummydogMongo.db.command({ ping: 1 })
       return globalThis.__yummydogMongo.db
     } catch {
       await closeMongo()
@@ -64,7 +66,7 @@ export async function getDb(): Promise<Db> {
   }
 
   try {
-    globalThis.__yummydogMongo = await connectMongo(uri)
+    globalThis.__yummydogMongo = await connectMongo(uri, dbName)
     return globalThis.__yummydogMongo.db
   } catch (error) {
     await closeMongo()
@@ -109,6 +111,12 @@ export async function ensureIndexes() {
     await db.collection('transactions').createIndex({ id: 1 }, { unique: true })
     await db.collection('transactions').createIndex({ orderId: 1 })
     await db.collection('transactions').createIndex({ createdAt: -1 })
+    await db.collection('expenses').createIndex({ id: 1 }, { unique: true })
+    await db.collection('expenses').createIndex({ date: -1 })
+    await db.collection('inventory').createIndex({ id: 1 }, { unique: true })
+    await db.collection('inventory').createIndex({ updatedAt: -1 })
+    await db.collection('equipment').createIndex({ id: 1 }, { unique: true })
+    await db.collection('counters').createIndex({ _id: 1 }, { unique: true })
   })
 }
 

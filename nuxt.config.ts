@@ -11,6 +11,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
     mongodbUri: process.env.MONGODB_URI ?? '',
+    mongodbDbName: process.env.MONGODB_DB_NAME ?? 'yummydog',
     ollamaParserUrl: process.env.OLLAMA_PARSER_URL ?? '',
     productAiWorkerUrl: process.env.PRODUCT_AI_WORKER_URL ?? '',
     productAiWorkerToken: process.env.PRODUCT_AI_WORKER_TOKEN ?? '',

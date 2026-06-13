@@ -75,6 +75,66 @@ function createInventoryPack(input: {
   }
 }
 
+function buildInventoryItem(input: {
+  name: string
+  vendor: string
+  store?: string
+  packageCost: number
+  unitsPerPackage: number
+  unit: InventoryUnit
+  productUrl?: string
+  perishable?: boolean
+  preset?: string
+  packageOunces?: number
+  ouncesPerServing?: number
+  initialPack?: { expirationDate: string; receivedDate?: string }
+}): InventoryItem {
+  const preset = input.preset ?? inferInventoryPreset(input.name)
+  const perishable = input.perishable ?? isPerishablePreset(preset ?? input.name)
+  const ozBased = isOzBasedPreset(preset)
+  const unitsPerPackage = ozBased ? 1 : Math.max(1, input.unitsPerPackage)
+  const packageOunces = ozBased ? input.packageOunces : input.packageOunces
+  const ouncesPerServing = ozBased
+    ? (input.ouncesPerServing ?? defaultOzPerServing(preset))
+    : input.ouncesPerServing
+  const unit: InventoryUnit = ozBased ? 'oz' : perishable ? 'each' : input.unit
+  const packs: InventoryPack[] = []
+
+  if (perishable && input.initialPack?.expirationDate) {
+    packs.push(
+      createInventoryPack({
+        unitsInPack: unitsPerPackage,
+        expirationDate: input.initialPack.expirationDate,
+        receivedDate: input.initialPack.receivedDate,
+        packageCost: input.packageCost,
+      }),
+    )
+  }
+
+  return {
+    id: uid(),
+    name: input.name.trim(),
+    preset,
+    vendor: input.vendor.trim(),
+    store: input.store?.trim() || undefined,
+    packageCost: input.packageCost,
+    unitsPerPackage,
+    unit,
+    costPerUnit: computeInventoryCostPerUnit({
+      packageCost: input.packageCost,
+      unitsPerPackage,
+      preset,
+      packageOunces,
+    }),
+    packageOunces,
+    ouncesPerServing,
+    updatedAt: new Date().toISOString(),
+    productUrl: input.productUrl?.trim() || undefined,
+    perishable: perishable || undefined,
+    packs: perishable ? packs : undefined,
+  }
+}
+
 export function useStore() {
   const orders = useState<Order[]>('store-orders', () => [])
   const transactions = useState<Transaction[]>('store-transactions', () => [])
@@ -84,25 +144,57 @@ export function useStore() {
   const hydrated = useState('store-hydrated', () => false)
   const loading = useState('store-loading', () => false)
 
+  async function migrateLocalStorageIfNeeded() {
+    const localExpenses = loadFromStorage<Expense[]>(EXPENSES_KEY, [])
+    const localInventory = loadFromStorage<InventoryItem[]>(INVENTORY_KEY, []).map(migrateInventoryItem)
+    const localEquipment = loadFromStorage<EquipmentAsset[]>(EQUIPMENT_KEY, []).map(withEquipmentPreset)
+
+    if (!localExpenses.length && !localInventory.length && !localEquipment.length) return
+
+    const hasRemoteData =
+      expenses.value.length > 0 || inventory.value.length > 0 || equipment.value.length > 0
+    if (hasRemoteData) return
+
+    await $fetch('/api/store/migrate', {
+      method: 'POST',
+      body: {
+        expenses: localExpenses,
+        inventory: localInventory,
+        equipment: localEquipment,
+      },
+    })
+
+    saveToStorage(EXPENSES_KEY, [])
+    saveToStorage(INVENTORY_KEY, [])
+    saveToStorage(EQUIPMENT_KEY, [])
+  }
+
+  async function refreshExpenses() {
+    expenses.value = await $fetch<Expense[]>('/api/expenses')
+  }
+
+  async function refreshInventory() {
+    const items = await $fetch<InventoryItem[]>('/api/inventory')
+    inventory.value = items.map(migrateInventoryItem)
+  }
+
+  async function refreshEquipment() {
+    const assets = await $fetch<EquipmentAsset[]>('/api/equipment')
+    equipment.value = assets.map(withEquipmentPreset)
+  }
+
   onMounted(async () => {
-    expenses.value = loadFromStorage(EXPENSES_KEY, [])
-    inventory.value = loadFromStorage<InventoryItem[]>(INVENTORY_KEY, []).map(migrateInventoryItem)
-    equipment.value = loadFromStorage<EquipmentAsset[]>(EQUIPMENT_KEY, []).map(withEquipmentPreset)
-    hydrated.value = true
-    await refreshAll()
+    loading.value = true
+    try {
+      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment()])
+      await migrateLocalStorageIfNeeded()
+      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment()])
+      hydrated.value = true
+      await refreshAll()
+    } finally {
+      loading.value = false
+    }
   })
-
-  watch(expenses, (v) => {
-    if (hydrated.value) saveToStorage(EXPENSES_KEY, v)
-  }, { deep: true })
-
-  watch(inventory, (v) => {
-    if (hydrated.value) saveToStorage(INVENTORY_KEY, v)
-  }, { deep: true })
-
-  watch(equipment, (v) => {
-    if (hydrated.value) saveToStorage(EQUIPMENT_KEY, v)
-  }, { deep: true })
 
   const stats = computed(() => computeStats(orders.value, transactions.value, expenses.value))
 
@@ -117,7 +209,13 @@ export function useStore() {
   async function refreshAll() {
     loading.value = true
     try {
-      await Promise.all([refreshOrders(), refreshTransactions()])
+      await Promise.all([
+        refreshOrders(),
+        refreshTransactions(),
+        refreshExpenses(),
+        refreshInventory(),
+        refreshEquipment(),
+      ])
     } finally {
       loading.value = false
     }
@@ -146,7 +244,7 @@ export function useStore() {
     return updated
   }
 
-  function addExpense(input: { label: string; amount: number; category: ExpenseCategory }) {
+  async function addExpense(input: { label: string; amount: number; category: ExpenseCategory }) {
     const expense: Expense = {
       id: uid(),
       label: input.label,
@@ -154,51 +252,56 @@ export function useStore() {
       category: input.category,
       date: new Date().toISOString(),
     }
-    expenses.value = [expense, ...expenses.value]
+    const saved = await $fetch<Expense>('/api/expenses', { method: 'POST', body: expense })
+    expenses.value = [saved, ...expenses.value]
   }
 
-  function deleteExpense(expenseId: string) {
+  async function deleteExpense(expenseId: string) {
+    await $fetch(`/api/expenses/${expenseId}`, { method: 'DELETE' })
     expenses.value = expenses.value.filter((e) => e.id !== expenseId)
   }
 
-  function addInventoryItem(input: {
-    name: string
-    vendor: string
-    store?: string
-    packageCost: number
-    unitsPerPackage: number
-    unit: InventoryUnit
-    productUrl?: string
-    perishable?: boolean
-    preset?: string
-    packageOunces?: number
-    ouncesPerServing?: number
-    initialPack?: { expirationDate: string; receivedDate?: string }
-  }) {
-    const preset = input.preset ?? inferInventoryPreset(input.name)
-    const perishable = input.perishable ?? isPerishablePreset(preset ?? input.name)
+  async function addInventoryItem(input: Parameters<typeof buildInventoryItem>[0]) {
+    const item = buildInventoryItem(input)
+    const saved = await $fetch<InventoryItem>('/api/inventory', { method: 'POST', body: item })
+    inventory.value = [migrateInventoryItem(saved), ...inventory.value]
+  }
+
+  async function updateInventoryItem(
+    id: string,
+    input: {
+      name: string
+      vendor: string
+      store?: string
+      packageCost: number
+      unitsPerPackage: number
+      unit: InventoryUnit
+      productUrl?: string
+      preset?: string
+      packageOunces?: number
+      ouncesPerServing?: number
+    },
+  ) {
+    const existing = inventory.value.find((item) => item.id === id)
+    if (!existing) return
+
+    const preset = input.preset ?? inferInventoryPreset(input.name.trim(), existing.preset)
+    const perishable = isPerishableItem({
+      ...existing,
+      name: input.name.trim(),
+      preset,
+      perishable: existing.perishable,
+    })
     const ozBased = isOzBasedPreset(preset)
     const unitsPerPackage = ozBased ? 1 : Math.max(1, input.unitsPerPackage)
     const packageOunces = ozBased ? input.packageOunces : input.packageOunces
     const ouncesPerServing = ozBased
-      ? (input.ouncesPerServing ?? defaultOzPerServing(preset))
+      ? (input.ouncesPerServing ?? existing.ouncesPerServing ?? defaultOzPerServing(preset))
       : input.ouncesPerServing
     const unit: InventoryUnit = ozBased ? 'oz' : perishable ? 'each' : input.unit
-    const packs: InventoryPack[] = []
-
-    if (perishable && input.initialPack?.expirationDate) {
-      packs.push(
-        createInventoryPack({
-          unitsInPack: unitsPerPackage,
-          expirationDate: input.initialPack.expirationDate,
-          receivedDate: input.initialPack.receivedDate,
-          packageCost: input.packageCost,
-        }),
-      )
-    }
 
     const item: InventoryItem = {
-      id: uid(),
+      ...existing,
       name: input.name.trim(),
       preset,
       vendor: input.vendor.trim(),
@@ -217,113 +320,63 @@ export function useStore() {
       updatedAt: new Date().toISOString(),
       productUrl: input.productUrl?.trim() || undefined,
       perishable: perishable || undefined,
-      packs: perishable ? packs : undefined,
+      packs: perishable ? (existing.packs ?? []) : undefined,
     }
-    inventory.value = [item, ...inventory.value]
-  }
 
-  function updateInventoryItem(
-    id: string,
-    input: {
-      name: string
-      vendor: string
-      store?: string
-      packageCost: number
-      unitsPerPackage: number
-      unit: InventoryUnit
-      productUrl?: string
-      preset?: string
-      packageOunces?: number
-      ouncesPerServing?: number
-    },
-  ) {
-    inventory.value = inventory.value.map((item) => {
-      if (item.id !== id) return item
-      const preset = input.preset ?? inferInventoryPreset(input.name.trim(), item.preset)
-      const perishable = isPerishableItem({ ...item, name: input.name.trim(), preset, perishable: item.perishable })
-      const ozBased = isOzBasedPreset(preset)
-      const unitsPerPackage = ozBased ? 1 : Math.max(1, input.unitsPerPackage)
-      const packageOunces = ozBased ? input.packageOunces : input.packageOunces
-      const ouncesPerServing = ozBased
-        ? (input.ouncesPerServing ?? item.ouncesPerServing ?? defaultOzPerServing(preset))
-        : input.ouncesPerServing
-      const unit: InventoryUnit = ozBased ? 'oz' : perishable ? 'each' : input.unit
-      return {
-        ...item,
-        name: input.name.trim(),
-        preset,
-        vendor: input.vendor.trim(),
-        store: input.store?.trim() || undefined,
-        packageCost: input.packageCost,
-        unitsPerPackage,
-        unit,
-        costPerUnit: computeInventoryCostPerUnit({
-          packageCost: input.packageCost,
-          unitsPerPackage,
-          preset,
-          packageOunces,
-        }),
-        packageOunces,
-        ouncesPerServing,
-        updatedAt: new Date().toISOString(),
-        productUrl: input.productUrl?.trim() || undefined,
-        perishable: perishable || undefined,
-        packs: perishable ? (item.packs ?? []) : undefined,
-      }
+    const saved = await $fetch<InventoryItem>(`/api/inventory/${id}`, {
+      method: 'PATCH',
+      body: item,
     })
+    inventory.value = inventory.value.map((i) => (i.id === id ? migrateInventoryItem(saved) : i))
   }
 
-  function addInventoryPack(
+  async function addInventoryPack(
     itemId: string,
     input: { expirationDate: string; receivedDate?: string; packageCost?: number; unitsInPack?: number },
   ) {
-    inventory.value = inventory.value.map((item) => {
-      if (item.id !== itemId) return item
-      const pack = createInventoryPack({
-        unitsInPack: input.unitsInPack ?? item.unitsPerPackage,
-        expirationDate: input.expirationDate,
-        receivedDate: input.receivedDate,
-        packageCost: input.packageCost ?? item.packageCost,
-      })
-      return {
-        ...item,
-        perishable: true,
-        unit: item.unit === 'each' ? 'pack' : item.unit,
-        packs: [pack, ...(item.packs ?? [])],
-        updatedAt: new Date().toISOString(),
-      }
+    const existing = inventory.value.find((item) => item.id === itemId)
+    if (!existing) return
+
+    const pack = createInventoryPack({
+      unitsInPack: input.unitsInPack ?? existing.unitsPerPackage,
+      expirationDate: input.expirationDate,
+      receivedDate: input.receivedDate,
+      packageCost: input.packageCost ?? existing.packageCost,
     })
+
+    const saved = await $fetch<InventoryItem>(`/api/inventory/${itemId}/packs`, {
+      method: 'POST',
+      body: pack,
+    })
+    inventory.value = inventory.value.map((item) =>
+      item.id === itemId ? migrateInventoryItem(saved) : item,
+    )
   }
 
-  function depleteInventoryPack(itemId: string, packId: string) {
-    inventory.value = inventory.value.map((item) => {
-      if (item.id !== itemId) return item
-      return {
-        ...item,
-        packs: (item.packs ?? []).map((pack) =>
-          pack.id === packId ? { ...pack, status: 'depleted' as const } : pack,
-        ),
-        updatedAt: new Date().toISOString(),
-      }
+  async function depleteInventoryPack(itemId: string, packId: string) {
+    const saved = await $fetch<InventoryItem>(`/api/inventory/${itemId}/packs/${packId}`, {
+      method: 'PATCH',
     })
+    inventory.value = inventory.value.map((item) =>
+      item.id === itemId ? migrateInventoryItem(saved) : item,
+    )
   }
 
-  function deleteInventoryPack(itemId: string, packId: string) {
-    inventory.value = inventory.value.map((item) => {
-      if (item.id !== itemId) return item
-      return {
-        ...item,
-        packs: (item.packs ?? []).filter((pack) => pack.id !== packId),
-        updatedAt: new Date().toISOString(),
-      }
+  async function deleteInventoryPack(itemId: string, packId: string) {
+    const saved = await $fetch<InventoryItem>(`/api/inventory/${itemId}/packs/${packId}`, {
+      method: 'DELETE',
     })
+    inventory.value = inventory.value.map((item) =>
+      item.id === itemId ? migrateInventoryItem(saved) : item,
+    )
   }
 
-  function deleteInventoryItem(id: string) {
+  async function deleteInventoryItem(id: string) {
+    await $fetch(`/api/inventory/${id}`, { method: 'DELETE' })
     inventory.value = inventory.value.filter((item) => item.id !== id)
   }
 
-  function addEquipmentAsset(input: {
+  async function addEquipmentAsset(input: {
     name: string
     preset?: string
     vendor?: string
@@ -344,10 +397,11 @@ export function useStore() {
       salvageValue: input.salvageValue,
       notes: input.notes?.trim() || undefined,
     }
-    equipment.value = [asset, ...equipment.value]
+    const saved = await $fetch<EquipmentAsset>('/api/equipment', { method: 'POST', body: asset })
+    equipment.value = [withEquipmentPreset(saved), ...equipment.value]
   }
 
-  function updateEquipmentAsset(
+  async function updateEquipmentAsset(
     id: string,
     input: {
       name: string
@@ -360,24 +414,30 @@ export function useStore() {
       notes?: string
     },
   ) {
-    equipment.value = equipment.value.map((asset) =>
-      asset.id === id
-        ? {
-            ...asset,
-            name: input.name.trim(),
-            preset: input.preset?.trim() || undefined,
-            vendor: input.vendor?.trim() || undefined,
-            purchaseDate: input.purchaseDate,
-            purchasePrice: input.purchasePrice,
-            usefulLifeYears: input.usefulLifeYears,
-            salvageValue: input.salvageValue,
-            notes: input.notes?.trim() || undefined,
-          }
-        : asset,
-    )
+    const existing = equipment.value.find((asset) => asset.id === id)
+    if (!existing) return
+
+    const asset: EquipmentAsset = {
+      ...existing,
+      name: input.name.trim(),
+      preset: input.preset?.trim() || undefined,
+      vendor: input.vendor?.trim() || undefined,
+      purchaseDate: input.purchaseDate,
+      purchasePrice: input.purchasePrice,
+      usefulLifeYears: input.usefulLifeYears,
+      salvageValue: input.salvageValue,
+      notes: input.notes?.trim() || undefined,
+    }
+
+    const saved = await $fetch<EquipmentAsset>(`/api/equipment/${id}`, {
+      method: 'PATCH',
+      body: asset,
+    })
+    equipment.value = equipment.value.map((a) => (a.id === id ? withEquipmentPreset(saved) : a))
   }
 
-  function deleteEquipmentAsset(id: string) {
+  async function deleteEquipmentAsset(id: string) {
+    await $fetch(`/api/equipment/${id}`, { method: 'DELETE' })
     equipment.value = equipment.value.filter((asset) => asset.id !== id)
   }
 
@@ -389,8 +449,12 @@ export function useStore() {
     equipment,
     stats,
     loading,
+    hydrated,
     refreshAll,
     refreshOrders,
+    refreshExpenses,
+    refreshInventory,
+    refreshEquipment,
     fetchOrder,
     placeOrder,
     updateOrderStatus,
