@@ -4,10 +4,14 @@ definePageMeta({
   middleware: 'admin',
 })
 
-type Tab = 'kanban' | 'transactions' | 'accounting' | 'stats'
+type Tab = 'kanban' | 'pos' | 'inventory' | 'equipment' | 'projector' | 'transactions' | 'accounting' | 'stats'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'kanban', label: 'Orders' },
+  { id: 'pos', label: 'POS' },
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'equipment', label: 'Equipment' },
+  { id: 'projector', label: 'Projector' },
   { id: 'transactions', label: 'Transactions' },
   { id: 'accounting', label: 'Accounting' },
   { id: 'stats', label: 'Stats' },
@@ -42,6 +46,10 @@ onMounted(() => {
 
   <main class="mx-auto max-w-6xl px-4 py-6">
     <AdminOrderKanban v-if="tab === 'kanban'" />
+    <AdminPosScanner v-else-if="tab === 'pos'" />
+    <AdminInventoryPanel v-else-if="tab === 'inventory'" />
+    <AdminEquipmentPanel v-else-if="tab === 'equipment'" />
+    <AdminProjectorPanel v-else-if="tab === 'projector'" />
     <AdminTransactionsPanel v-else-if="tab === 'transactions'" />
     <AdminAccountingPanel v-else-if="tab === 'accounting'" />
     <AdminStatsPanel v-else-if="tab === 'stats'" />

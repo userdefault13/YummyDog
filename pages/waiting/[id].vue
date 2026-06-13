@@ -173,6 +173,13 @@ const isCancelled = computed(() => order.value?.status === 'cancelled')
         </ol>
       </UiCard>
 
+      <UiCard v-if="!isCancelled" class="mt-6 p-4">
+        <p class="mb-3 text-center text-sm font-semibold">Pickup QR code</p>
+        <ClientOnly>
+          <CustomerOrderQrCode :order-id="order.id" :pickup-number="order.pickupNumber" />
+        </ClientOnly>
+      </UiCard>
+
       <UiCard class="mt-4 p-4">
         <p class="mb-2 text-sm font-semibold">Order summary</p>
         <ul class="space-y-1 text-sm text-black/70">

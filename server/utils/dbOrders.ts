@@ -1,6 +1,6 @@
 import type { CreateOrderInput, Order, OrderStatus, Transaction } from '~/types'
 import { normalizeOrderStatus } from '~/utils/orderStatus'
-import { ensureIndexes, getDb, nextPickupNumber } from './mongo'
+import { ensureIndexes, nextPickupNumber, withMongoRetry } from './mongo'
 
 function uid() {
   return crypto.randomUUID()
@@ -39,29 +39,80 @@ function mapTransaction(doc: Record<string, unknown>): Transaction {
 
 export async function listOrders(): Promise<Order[]> {
   await ensureIndexes()
-  const db = await getDb()
-  const docs = await db.collection('orders').find({}).sort({ createdAt: -1 }).toArray()
-  return docs.map((d) => mapOrder(d as Record<string, unknown>))
+  return withMongoRetry(async (db) => {
+    const docs = await db.collection('orders').find({}).sort({ createdAt: -1 }).toArray()
+    return docs.map((d) => mapOrder(d as Record<string, unknown>))
+  })
 }
 
 export async function getOrderById(id: string): Promise<Order | null> {
   await ensureIndexes()
-  const db = await getDb()
-  const doc = await db.collection('orders').findOne({ id })
-  return doc ? mapOrder(doc as Record<string, unknown>) : null
+  return withMongoRetry(async (db) => {
+    const doc = await db.collection('orders').findOne({ id })
+    return doc ? mapOrder(doc as Record<string, unknown>) : null
+  })
 }
 
 export async function getOrderByStripeSession(sessionId: string): Promise<Order | null> {
   await ensureIndexes()
-  const db = await getDb()
-  const doc = await db.collection('orders').findOne({ stripeSessionId: sessionId })
-  return doc ? mapOrder(doc as Record<string, unknown>) : null
+  return withMongoRetry(async (db) => {
+    const doc = await db.collection('orders').findOne({ stripeSessionId: sessionId })
+    return doc ? mapOrder(doc as Record<string, unknown>) : null
+  })
+}
+
+export async function getOrderByPickupNumberToday(pickupNumber: number): Promise<Order | null> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const doc = await db.collection('orders').findOne({
+      pickupNumber,
+      createdAt: { $gte: `${today}T00:00:00.000Z`, $lte: `${today}T23:59:59.999Z` },
+    })
+    return doc ? mapOrder(doc as Record<string, unknown>) : null
+  })
+}
+
+export async function getTransactionById(id: string): Promise<Transaction | null> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const doc = await db.collection('transactions').findOne({ id })
+    return doc ? mapTransaction(doc as Record<string, unknown>) : null
+  })
+}
+
+export async function getTransactionForOrder(orderId: string): Promise<Transaction | null> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const doc = await db.collection('transactions').findOne({ orderId, type: 'sale' })
+    return doc ? mapTransaction(doc as Record<string, unknown>) : null
+  })
+}
+
+export async function lookupOrderFromScan(code: string): Promise<{ order: Order; transaction: Transaction | null } | null> {
+  const { parseScanCode } = await import('~/utils/qr')
+  const parsed = parseScanCode(code)
+
+  let order: Order | null = null
+
+  if (parsed.orderId) {
+    order = await getOrderById(parsed.orderId)
+  } else if (parsed.pickupNumber != null) {
+    order = await getOrderByPickupNumberToday(parsed.pickupNumber)
+  } else if (parsed.transactionId) {
+    const tx = await getTransactionById(parsed.transactionId)
+    if (tx) order = await getOrderById(tx.orderId)
+  }
+
+  if (!order) return null
+
+  const transaction = await getTransactionForOrder(order.id)
+  return { order, transaction }
 }
 
 export async function createOrder(input: CreateOrderInput): Promise<{ order: Order; transaction: Transaction }> {
   await ensureIndexes()
-  const db = await getDb()
-
+  return withMongoRetry(async (db) => {
   if (input.id) {
     const existing = await db.collection('orders').findOne({ id: input.id })
     if (existing) {
@@ -121,12 +172,12 @@ export async function createOrder(input: CreateOrderInput): Promise<{ order: Ord
   await db.collection('transactions').insertOne(transaction)
 
   return { order, transaction }
+  })
 }
 
 export async function updateOrderStatus(id: string, status: OrderStatus): Promise<Order> {
   await ensureIndexes()
-  const db = await getDb()
-  const updatedAt = new Date().toISOString()
+  return withMongoRetry(async (db) => {  const updatedAt = new Date().toISOString()
 
   const result = await db.collection('orders').findOneAndUpdate(
     { id },
@@ -139,11 +190,13 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
   }
 
   return mapOrder(result as Record<string, unknown>)
+  })
 }
 
 export async function listTransactions(): Promise<Transaction[]> {
   await ensureIndexes()
-  const db = await getDb()
-  const docs = await db.collection('transactions').find({}).sort({ createdAt: -1 }).toArray()
-  return docs.map((d) => mapTransaction(d as Record<string, unknown>))
+  return withMongoRetry(async (db) => {
+    const docs = await db.collection('transactions').find({}).sort({ createdAt: -1 }).toArray()
+    return docs.map((d) => mapTransaction(d as Record<string, unknown>))
+  })
 }

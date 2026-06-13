@@ -11,6 +11,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
     mongodbUri: process.env.MONGODB_URI ?? '',
+    ollamaParserUrl: process.env.OLLAMA_PARSER_URL ?? '',
+    productAiWorkerUrl: process.env.PRODUCT_AI_WORKER_URL ?? '',
+    productAiWorkerToken: process.env.PRODUCT_AI_WORKER_TOKEN ?? '',
     public: {
       stripePublishableKey: process.env.NUXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? '',
     },

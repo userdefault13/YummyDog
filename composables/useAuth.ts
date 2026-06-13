@@ -1,4 +1,4 @@
-const ADMIN_PASSWORD = 'Imation1'
+const ADMIN_PASSWORD = 'tuto'
 const AUTH_KEY = 'yummydog-admin-auth'
 
 export function useAuth() {

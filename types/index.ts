@@ -78,6 +78,55 @@ export interface BusinessStats {
   topItems: { name: string; quantity: number }[]
 }
 
+export type InventoryUnit = 'each' | 'pack' | 'case' | 'lb' | 'oz' | 'gallon' | 'roll'
+
+export type InventoryPackStatus = 'active' | 'depleted'
+
+export interface InventoryPack {
+  id: string
+  /** Units in this pack (usually matches item unitsPerPackage at receive time) */
+  unitsInPack: number
+  expirationDate: string
+  receivedDate: string
+  packageCost?: number
+  status: InventoryPackStatus
+}
+
+export interface InventoryItem {
+  id: string
+  name: string
+  /** Preset category (Hot Dogs, Buns, etc.) for matching and cost recipes */
+  preset?: string
+  vendor: string
+  store?: string
+  packageCost: number
+  unitsPerPackage: number
+  unit: InventoryUnit
+  costPerUnit: number
+  updatedAt: string
+  productUrl?: string
+  /** Total ounces in one purchased package (cheese, chili, onions, tomatoes) */
+  packageOunces?: number
+  /** Ounces used per serving in recipes / COGS */
+  ouncesPerServing?: number
+  /** Track each physical pack with its own expiration (hot dogs, buns, etc.) */
+  perishable?: boolean
+  packs?: InventoryPack[]
+}
+
+export interface EquipmentAsset {
+  id: string
+  name: string
+  /** Preset category chip (Grill, Cooler, etc.) when asset was tagged from presets */
+  preset?: string
+  vendor?: string
+  purchaseDate: string
+  purchasePrice: number
+  usefulLifeYears: number
+  salvageValue: number
+  notes?: string
+}
+
 export interface CreateOrderInput {
   id?: string
   customerName: string
