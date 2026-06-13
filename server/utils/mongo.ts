@@ -116,7 +116,6 @@ export async function ensureIndexes() {
     await db.collection('inventory').createIndex({ id: 1 }, { unique: true })
     await db.collection('inventory').createIndex({ updatedAt: -1 })
     await db.collection('equipment').createIndex({ id: 1 }, { unique: true })
-    await db.collection('counters').createIndex({ _id: 1 }, { unique: true })
   })
 }
 
