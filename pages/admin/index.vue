@@ -48,7 +48,7 @@ onMounted(() => {
 
   <main class="mx-auto max-w-6xl px-4 py-6">
     <AdminOrderKanban v-if="tab === 'kanban'" />
-    <AdminPosScanner v-else-if="tab === 'pos'" />
+    <AdminPosTerminal v-else-if="tab === 'pos'" />
     <AdminMenuPanel v-else-if="tab === 'menu'" />
     <AdminInventoryPanel v-else-if="tab === 'inventory'" />
     <AdminEquipmentPanel v-else-if="tab === 'equipment'" />
