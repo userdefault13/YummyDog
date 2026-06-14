@@ -1,0 +1,95 @@
+import type { EquipmentAsset, Expense } from '~/types'
+import { inferEquipmentPreset } from './equipmentPresets'
+
+/** Amazon cart seed — fixed ids so re-seeding upserts instead of duplicating */
+export const EQUIPMENT_SEED: EquipmentAsset[] = [
+  {
+    id: 'seed-coleman-cooler-52qt',
+    name: 'Coleman Classic Series Insulated Portable Cooler, 52 Quart, Desert Sand',
+    preset: 'Cooler',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 49.99,
+    usefulLifeYears: 7,
+    salvageValue: 0,
+    notes: '52 qt, leak-resistant, keeps ice up to 5 days',
+  },
+  {
+    id: 'seed-wagon-500lbs',
+    name: 'Collapsible Wagon Cart Foldable, 500LBS Heavy Duty with Brakes & All-Terrain Wheels, 34" Extra Long',
+    preset: 'Wagon',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 59.99,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes: '500LBS capacity, folding wagon for camping/beach/events',
+  },
+  {
+    id: 'seed-alvantor-canopy-10x10',
+    name: 'Alvantor Pop Up Canopy 10x10, Vendor Booth Event Tent, Beige',
+    preset: 'Tent',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 219.99,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes: '10\'x10\' pop-up canopy for vendor booth / shade',
+  },
+  {
+    id: 'seed-honeydak-hand-wash',
+    name: 'Honeydak Portable Hand Wash Station with Soap Dispenser, 2.6 Gallon',
+    preset: 'Hand Wash Station',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 55.99,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes: 'Portable hand washing station for outdoor events',
+  },
+  {
+    id: 'seed-charbroil-grill',
+    name: 'Charbroil Bistro Pro Tabletop Electric Grill, Black',
+    preset: 'Grill',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 149.03,
+    usefulLifeYears: 7,
+    salvageValue: 0,
+    notes: 'Tabletop electric grill, model 25302149',
+  },
+  {
+    id: 'seed-vevor-work-table',
+    name: 'VEVOR Stainless Steel Foldable Work Table, 24 × 48 Inch',
+    preset: 'Folding Table',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 107.99,
+    usefulLifeYears: 10,
+    salvageValue: 0,
+    notes: 'Heavy-duty stainless prep/work table for outdoor kitchen setup',
+  },
+  {
+    id: 'seed-jackery-explorer-300',
+    name: 'Jackery Portable Power Station Explorer 300, 292Wh LiFePO4',
+    preset: 'Battery Generator',
+    vendor: 'Jackery Inc (Amazon)',
+    purchaseDate: '2026-06-12',
+    purchasePrice: 199.0,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes: 'E300 — backup power / solar generator for events',
+  },
+].map((asset) => ({
+  ...asset,
+  preset: asset.preset ?? inferEquipmentPreset(asset.name),
+}))
+
+/** Equipment purchases seeded into Accounting (linked by equipment asset id) */
+export const EQUIPMENT_EXPENSE_SEED: Expense[] = EQUIPMENT_SEED.map((asset) => ({
+  id: `seed-expense-${asset.id}`,
+  label: `Equipment — ${asset.preset ?? 'Asset'}: ${asset.name.split(',')[0]}`,
+  amount: asset.purchasePrice,
+  category: 'equipment',
+  date: `${asset.purchaseDate}T12:00:00.000Z`,
+}))

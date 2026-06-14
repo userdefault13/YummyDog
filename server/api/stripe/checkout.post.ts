@@ -1,6 +1,7 @@
 import type { OrderItem } from '~/types'
 import { buildLineItems, verifyOrderAmounts } from '../../utils/order'
 import { useStripeClient } from '../../utils/stripe'
+import { resolveTaxRate } from '../../utils/menuSettings'
 
 interface CheckoutBody {
   orderId: string
@@ -27,7 +28,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Phone or email is required' })
   }
 
-  if (!verifyOrderAmounts(body.items, body.subtotal, body.tax, body.total)) {
+  if (!verifyOrderAmounts(body.items, body.subtotal, body.tax, body.total, await resolveTaxRate())) {
     throw createError({ statusCode: 400, statusMessage: 'Order totals do not match menu prices' })
   }
 

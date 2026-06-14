@@ -1,6 +1,7 @@
 import type { CreateOrderInput } from '~/types'
 import { verifyOrderAmounts } from '../../utils/order'
 import { createOrder } from '../../utils/dbOrders'
+import { resolveTaxRate } from '../../utils/menuSettings'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<CreateOrderInput>(event)
@@ -15,7 +16,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Phone or email is required' })
   }
 
-  if (!verifyOrderAmounts(body.items, body.subtotal, body.tax, body.total)) {
+  const taxRate = await resolveTaxRate()
+  if (!verifyOrderAmounts(body.items, body.subtotal, body.tax, body.total, taxRate)) {
     throw createError({ statusCode: 400, statusMessage: 'Order totals do not match menu prices' })
   }
 

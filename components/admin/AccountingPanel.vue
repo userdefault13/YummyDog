@@ -7,6 +7,8 @@ const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string }[] = [
   { id: 'rent', label: 'Rent' },
   { id: 'utilities', label: 'Utilities' },
   { id: 'payroll', label: 'Payroll' },
+  { id: 'licensing', label: 'Licensing' },
+  { id: 'equipment', label: 'Equipment' },
   { id: 'other', label: 'Other' },
 ]
 

@@ -1,12 +1,42 @@
 export type MenuCategory = 'hotdogs' | 'sides' | 'drinks'
 
+/** One ingredient line in a menu item recipe (maps to inventory presets for COGS) */
+export interface MenuRecipeLine {
+  /** Inventory preset slug, e.g. Hot Dogs, Buns, Cheese */
+  preset: string
+  label: string
+  /** Count-based items (franks, buns, napkins) */
+  qty?: number
+  /** Oz-based: multiples of item ouncesPerServing */
+  servings?: number
+  /** Oz-based: explicit ounces (overrides servings) */
+  oz?: number
+}
+
 export interface MenuItem {
   id: string
   name: string
   description: string
+  /** Customer-facing price in USD */
   price: number
   category: MenuCategory
   emoji: string
+  /** Ingredient lines used for COGS / projector economics */
+  recipe: MenuRecipeLine[]
+  /** When false, hidden from customer menu and POS */
+  active: boolean
+  /** Lower numbers appear first within a category */
+  sortOrder: number
+  /** Highlight on menu hero (at most one recommended) */
+  featured?: boolean
+  updatedAt: string
+}
+
+export interface MenuSettings {
+  id: 'default'
+  /** Sales tax as decimal, e.g. 0.0825 = 8.25% */
+  taxRate: number
+  updatedAt: string
 }
 
 export interface CartLine {
@@ -56,7 +86,7 @@ export interface Transaction {
   createdAt: string
 }
 
-export type ExpenseCategory = 'supplies' | 'rent' | 'utilities' | 'payroll' | 'other'
+export type ExpenseCategory = 'supplies' | 'rent' | 'utilities' | 'payroll' | 'licensing' | 'equipment' | 'other'
 
 export interface Expense {
   id: string
@@ -64,6 +94,51 @@ export interface Expense {
   amount: number
   category: ExpenseCategory
   date: string
+}
+
+export type LicenseFeePeriod = 'annual' | 'one-time' | 'monthly'
+
+export interface LicenseFee {
+  label: string
+  amount: number
+  period: LicenseFeePeriod
+  notes?: string
+}
+
+export interface LicenseRequirement {
+  label: string
+  description: string
+  met?: boolean
+}
+
+export interface LicenseRestriction {
+  label: string
+  description: string
+}
+
+export interface LicenseContact {
+  label: string
+  value: string
+  href?: string
+}
+
+export interface LicenseRecord {
+  id: string
+  jurisdiction: string
+  title: string
+  category: 'ordinance' | 'permit' | 'requirements' | 'placement' | 'program'
+  /** Highlights this permit tier / rule set for YummyDog (hot dog cart) */
+  applicableToYummydog: boolean
+  effectiveDate?: string
+  ordinanceCode?: string
+  sourceUrl?: string
+  sourceDate?: string
+  fees: LicenseFee[]
+  requirements: LicenseRequirement[]
+  restrictions: LicenseRestriction[]
+  contacts: LicenseContact[]
+  notes?: string
+  updatedAt: string
 }
 
 export interface BusinessStats {

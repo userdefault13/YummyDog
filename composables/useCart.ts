@@ -1,7 +1,7 @@
-import { TAX_RATE } from '~/data/menu'
 import type { CartLine, MenuItem } from '~/types'
 
 export function useCart() {
+  const { taxRate } = useMenu()
   const lines = useState<CartLine[]>('cart-lines', () => [])
 
   const itemCount = computed(() => lines.value.reduce((s, l) => s + l.quantity, 0))
@@ -10,7 +10,7 @@ export function useCart() {
     lines.value.reduce((s, l) => s + l.item.price * l.quantity, 0),
   )
 
-  const tax = computed(() => subtotal.value * TAX_RATE)
+  const tax = computed(() => subtotal.value * taxRate.value)
   const total = computed(() => subtotal.value + tax.value)
 
   function addItem(item: MenuItem) {

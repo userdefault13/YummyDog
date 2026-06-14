@@ -1,4 +1,4 @@
-import { MENU } from '~/data/menu'
+import { MENU_SEED } from '~/data/menuSeed'
 import { recipeLineCost, type RecipeLineInput, consumableUnitCost } from '~/utils/inventoryCost'
 import { inferInventoryPreset, isOzBasedPreset, type InventoryPreset } from '~/data/inventoryPresets'
 import { computeDepreciation } from '~/utils/depreciation'
@@ -6,32 +6,13 @@ import type { EquipmentAsset, Expense, InventoryItem, MenuItem } from '~/types'
 
 export type RecipeLine = RecipeLineInput
 
-/** Ingredient lines per hot-dog menu item (base + upgrades) */
-export const HOT_DOG_BASE_RECIPE: RecipeLine[] = [
-  { preset: 'Hot Dogs', qty: 1, label: 'Frank' },
-  { preset: 'Buns', qty: 1, label: 'Bun' },
-  { preset: 'Condiments', qty: 0.08, label: 'Condiments' },
-  { preset: 'Napkins', qty: 0.15, label: 'Napkin' },
-  { preset: 'Trays', qty: 0.05, label: 'Tray liner' },
-]
-
-export const HOT_DOG_UPGRADES: Record<string, RecipeLine[]> = {
-  cheese: [{ preset: 'Cheese', servings: 1, label: 'Cheese' }],
-  'chili-cheese': [
-    { preset: 'Cheese', servings: 1, label: 'Cheese' },
-    { preset: 'Chili', servings: 1, label: 'Chili' },
-    { preset: 'Onions', servings: 1, label: 'Onion' },
-  ],
-}
-
-export const SIDE_DRINK_RECIPE: Partial<Record<string, RecipeLine[]>> = {
-  chips: [{ preset: 'Chips', qty: 1, label: 'Chips' }],
-  soda: [{ preset: 'Soda', qty: 1, label: 'Soda' }],
-  water: [{ preset: 'Water', qty: 1, label: 'Water' }],
-}
-
 export interface ProjectorAssumptions {
-  fixedCostsPerDay: number
+  /** Fuel, propane, ice, and other daily equipment ops (excludes asset depreciation) */
+  equipmentPerDay: number
+  laborPerDay: number
+  permitFeePerDay: number
+  /** Target net profit per day on top of break-even */
+  bonusProfitPerDay: number
   includeRecordedExpenses: boolean
   expenseLookbackDays: number
   operatingDaysPerMonth: number
@@ -44,7 +25,10 @@ export interface ProjectorAssumptions {
 }
 
 export const DEFAULT_PROJECTOR_ASSUMPTIONS: ProjectorAssumptions = {
-  fixedCostsPerDay: 75,
+  equipmentPerDay: 15,
+  laborPerDay: 50,
+  permitFeePerDay: 61,
+  bonusProfitPerDay: 0,
   includeRecordedExpenses: true,
   expenseLookbackDays: 30,
   operatingDaysPerMonth: 12,
@@ -78,9 +62,13 @@ export interface VolumeScenario {
 export interface ProjectorSnapshot {
   menuEconomics: MenuItemEconomics[]
   missingInventory: string[]
+  assumedOverheadPerDay: number
   equipmentDepreciationPerDay: number
   recordedExpensesPerDay: number
   totalFixedCostsPerDay: number
+  bonusProfitPerDay: number
+  profitTargetDogsPerDay: number
+  profitTargetRevenuePerDay: number
   avgRevenuePerDog: number
   avgDogVariableCost: number
   avgVariableCostPerDog: number
@@ -118,11 +106,15 @@ function economicsForMenuItem(
   item: MenuItem,
   inventory: InventoryItem[],
 ): MenuItemEconomics {
-  const baseLines = item.category === 'hotdogs' ? [...HOT_DOG_BASE_RECIPE] : []
-  const upgradeLines = HOT_DOG_UPGRADES[item.id] ?? []
-  const sideLines = SIDE_DRINK_RECIPE[item.id] ?? []
+  const lines: RecipeLineInput[] = (item.recipe ?? []).map((line) => ({
+    preset: line.preset as RecipeLineInput['preset'],
+    label: line.label,
+    qty: line.qty,
+    servings: line.servings,
+    oz: line.oz,
+  }))
 
-  const { cost, missing } = recipeCost([...baseLines, ...upgradeLines, ...sideLines], inventory)
+  const { cost, missing } = recipeCost(lines, inventory)
 
   const contributionMargin = item.price - cost
   const marginPercent = item.price > 0 ? (contributionMargin / item.price) * 100 : 0
@@ -175,6 +167,7 @@ function inventoryCostWarnings(inventory: InventoryItem[]): string[] {
     const perUnit = consumableUnitCost(item)
     const multiUnitPresets: InventoryPreset[] = [
       'Hot Dogs',
+      'Wieners',
       'Buns',
       'Napkins',
       'Chips',
@@ -213,7 +206,7 @@ export function computeProjectorSnapshot(
   equipment: EquipmentAsset[],
   expenses: Expense[],
   assumptions: ProjectorAssumptions,
-  menu: MenuItem[] = MENU,
+  menu: MenuItem[] = MENU_SEED,
 ): ProjectorSnapshot {
   const menuEconomics = menu.map((item) => economicsForMenuItem(item, inventory))
   const economicsById = Object.fromEntries(menuEconomics.map((e) => [e.menuItemId, e]))
@@ -221,6 +214,9 @@ export function computeProjectorSnapshot(
   const missingInventory = [
     ...new Set(menuEconomics.flatMap((e) => e.missingIngredients)),
   ]
+
+  const assumedOverheadPerDay =
+    assumptions.equipmentPerDay + assumptions.laborPerDay + assumptions.permitFeePerDay
 
   const equipmentDepreciationPerDay =
     equipment.reduce((sum, asset) => sum + computeDepreciation(asset).monthlyDepreciation, 0)
@@ -231,7 +227,9 @@ export function computeProjectorSnapshot(
     : 0
 
   const totalFixedCostsPerDay =
-    assumptions.fixedCostsPerDay + equipmentDepreciationPerDay + recordedExpensesPerDay
+    assumedOverheadPerDay + equipmentDepreciationPerDay + recordedExpensesPerDay
+
+  const bonusProfitPerDay = assumptions.bonusProfitPerDay
 
   const mix = normalizeMix(
     assumptions.mixRegularPct,
@@ -287,6 +285,16 @@ export function computeProjectorSnapshot(
   const breakEvenRevenuePerDay =
     avgMarginPercent > 0 ? totalFixedCostsPerDay / (avgMarginPercent / 100) : Infinity
 
+  const profitTargetDogsPerDay =
+    avgContributionMarginPerUnit > 0
+      ? Math.ceil((totalFixedCostsPerDay + bonusProfitPerDay) / avgContributionMarginPerUnit)
+      : Infinity
+
+  const profitTargetRevenuePerDay =
+    avgMarginPercent > 0
+      ? (totalFixedCostsPerDay + bonusProfitPerDay) / (avgMarginPercent / 100)
+      : Infinity
+
   const scenarioVolumes = [
     25,
     50,
@@ -316,9 +324,13 @@ export function computeProjectorSnapshot(
   return {
     menuEconomics,
     missingInventory,
+    assumedOverheadPerDay,
     equipmentDepreciationPerDay,
     recordedExpensesPerDay,
     totalFixedCostsPerDay,
+    bonusProfitPerDay,
+    profitTargetDogsPerDay,
+    profitTargetRevenuePerDay,
     avgRevenuePerDog: avgRevenuePerUnit,
     avgDogVariableCost,
     avgVariableCostPerDog: avgVariableCostPerUnit,

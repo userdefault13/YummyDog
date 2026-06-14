@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { MENU } from '~/data/menu'
 import { formatMoney } from '~/utils/finance'
 import {
   computeProjectorSnapshot,
@@ -10,12 +9,31 @@ import { loadFromStorage, saveToStorage } from '~/utils/storage'
 
 const ASSUMPTIONS_KEY = 'yummydog-projector-assumptions'
 
-const { inventory, equipment, expenses, stats } = useStore()
+type LegacyAssumptions = Partial<ProjectorAssumptions> & { fixedCostsPerDay?: number }
 
-const assumptions = ref<ProjectorAssumptions>({
-  ...DEFAULT_PROJECTOR_ASSUMPTIONS,
-  ...loadFromStorage<Partial<ProjectorAssumptions>>(ASSUMPTIONS_KEY, {}),
-})
+function normalizeAssumptions(raw: LegacyAssumptions): ProjectorAssumptions {
+  const merged = { ...DEFAULT_PROJECTOR_ASSUMPTIONS, ...raw }
+
+  if (raw.fixedCostsPerDay != null && raw.laborPerDay == null && raw.equipmentPerDay == null) {
+    merged.laborPerDay = raw.fixedCostsPerDay
+  }
+
+  return merged
+}
+
+const { inventory, equipment, expenses, stats } = useStore()
+const { items: menuItems } = useMenu()
+
+const assumptions = ref<ProjectorAssumptions>(
+  normalizeAssumptions(loadFromStorage<LegacyAssumptions>(ASSUMPTIONS_KEY, {})),
+)
+
+const assumedOverheadPerDay = computed(
+  () =>
+    assumptions.value.equipmentPerDay
+    + assumptions.value.laborPerDay
+    + assumptions.value.permitFeePerDay,
+)
 
 watch(
   assumptions,
@@ -26,7 +44,13 @@ watch(
 )
 
 const snapshot = computed(() =>
-  computeProjectorSnapshot(inventory.value, equipment.value, expenses.value, assumptions.value, MENU),
+  computeProjectorSnapshot(
+    inventory.value,
+    equipment.value,
+    expenses.value,
+    assumptions.value,
+    menuItems.value ?? [],
+  ),
 )
 
 const mixTotal = computed(
@@ -117,9 +141,10 @@ function resetAssumptions() {
         <p class="text-xs uppercase tracking-wide text-black/45">Fixed costs / day</p>
         <p class="mt-1 text-2xl font-bold">{{ formatMoney(snapshot.totalFixedCostsPerDay) }}</p>
         <p class="mt-1 text-xs text-black/45">
-          Incl. {{ formatMoney(snapshot.equipmentDepreciationPerDay) }} equip.
+          {{ formatMoney(snapshot.assumedOverheadPerDay) }} overhead
+          · {{ formatMoney(snapshot.equipmentDepreciationPerDay) }} depreciation
           <span v-if="assumptions.includeRecordedExpenses">
-            · {{ formatMoney(snapshot.recordedExpensesPerDay) }} logged exp.
+            · {{ formatMoney(snapshot.recordedExpensesPerDay) }} logged
           </span>
         </p>
       </UiCard>
@@ -130,6 +155,10 @@ function resetAssumptions() {
         </p>
         <p class="mt-1 text-xs text-black/45">
           {{ formatMoney(snapshot.breakEvenRevenuePerDay) }} revenue
+          <span v-if="assumptions.bonusProfitPerDay > 0">
+            · {{ formatUnits(snapshot.profitTargetDogsPerDay) }} dogs for
+            {{ formatMoney(assumptions.bonusProfitPerDay) }} profit
+          </span>
         </p>
       </UiCard>
     </div>
@@ -138,16 +167,59 @@ function resetAssumptions() {
       <UiCard class="p-4">
         <h3 class="font-semibold">Assumptions</h3>
         <div class="mt-4 space-y-4">
-          <label class="block text-xs text-black/45">
-            Fixed costs per day (permits, labor, fuel…)
-            <input
-              v-model.number="assumptions.fixedCostsPerDay"
-              type="number"
-              min="0"
-              step="5"
-              :class="numberInputClass"
-            />
-          </label>
+          <div>
+            <p class="text-xs font-medium text-black/55">Daily overhead</p>
+            <div class="mt-2 grid gap-3 sm:grid-cols-2">
+              <label class="block text-xs text-black/45">
+                Equipment / day
+                <span class="block text-[10px] text-black/35">Fuel, propane, ice…</span>
+                <input
+                  v-model.number="assumptions.equipmentPerDay"
+                  type="number"
+                  min="0"
+                  step="5"
+                  :class="numberInputClass"
+                />
+              </label>
+              <label class="block text-xs text-black/45">
+                Labor / day
+                <input
+                  v-model.number="assumptions.laborPerDay"
+                  type="number"
+                  min="0"
+                  step="5"
+                  :class="numberInputClass"
+                />
+              </label>
+              <label class="block text-xs text-black/45">
+                Permit fee / day
+                <span class="block text-[10px] text-black/35">Amortize annual permit over operating days</span>
+                <input
+                  v-model.number="assumptions.permitFeePerDay"
+                  type="number"
+                  min="0"
+                  step="5"
+                  :class="numberInputClass"
+                />
+              </label>
+              <label class="block text-xs text-black/45">
+                Bonus profit / day
+                <span class="block text-[10px] text-black/35">Target net profit above break-even</span>
+                <input
+                  v-model.number="assumptions.bonusProfitPerDay"
+                  type="number"
+                  min="0"
+                  step="5"
+                  :class="numberInputClass"
+                />
+              </label>
+            </div>
+            <p class="mt-2 text-xs text-black/45">
+              Overhead subtotal:
+              <span class="font-medium text-brand-charcoal">{{ formatMoney(assumedOverheadPerDay) }}</span>
+              · Asset depreciation added from Equipment tab
+            </p>
+          </div>
 
           <label class="flex items-center gap-2 text-sm">
             <input v-model="assumptions.includeRecordedExpenses" type="checkbox" class="rounded" />
@@ -298,6 +370,23 @@ function resetAssumptions() {
               :class="profitClass(snapshot.dailyAtTarget.netProfitPerDay)"
             >
               {{ formatMoney(snapshot.dailyAtTarget.netProfitPerDay) }}
+            </dd>
+          </div>
+          <div
+            v-if="assumptions.bonusProfitPerDay > 0"
+            class="flex justify-between gap-4 text-xs"
+          >
+            <dt class="text-black/45">vs bonus profit target</dt>
+            <dd
+              :class="profitClass(snapshot.dailyAtTarget.netProfitPerDay - assumptions.bonusProfitPerDay)"
+            >
+              {{
+                snapshot.dailyAtTarget.netProfitPerDay >= assumptions.bonusProfitPerDay
+                  ? '+'
+                  : ''
+              }}{{
+                formatMoney(snapshot.dailyAtTarget.netProfitPerDay - assumptions.bonusProfitPerDay)
+              }}
             </dd>
           </div>
         </dl>

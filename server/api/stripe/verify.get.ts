@@ -1,6 +1,7 @@
 import type { OrderItem } from '~/types'
 import { verifyOrderAmounts } from '../../utils/order'
 import { useStripeClient } from '../../utils/stripe'
+import { resolveTaxRate } from '../../utils/menuSettings'
 
 export default defineEventHandler(async (event) => {
   const sessionId = getQuery(event).session_id
@@ -43,7 +44,7 @@ export default defineEventHandler(async (event) => {
   const parsedTax = parseFloat(tax)
   const parsedTotal = parseFloat(total)
 
-  if (!verifyOrderAmounts(items, parsedSubtotal, parsedTax, parsedTotal)) {
+  if (!verifyOrderAmounts(items, parsedSubtotal, parsedTax, parsedTotal, await resolveTaxRate())) {
     throw createError({ statusCode: 400, statusMessage: 'Order totals mismatch' })
   }
 

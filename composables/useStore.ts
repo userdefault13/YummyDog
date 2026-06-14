@@ -12,6 +12,7 @@ import type {
   InventoryItem,
   InventoryPack,
   InventoryUnit,
+  LicenseRecord,
   Order,
   OrderStatus,
   Transaction,
@@ -141,6 +142,7 @@ export function useStore() {
   const expenses = useState<Expense[]>('store-expenses', () => [])
   const inventory = useState<InventoryItem[]>('store-inventory', () => [])
   const equipment = useState<EquipmentAsset[]>('store-equipment', () => [])
+  const licenses = useState<LicenseRecord[]>('store-licenses', () => [])
   const hydrated = useState('store-hydrated', () => false)
   const loading = useState('store-loading', () => false)
 
@@ -183,12 +185,16 @@ export function useStore() {
     equipment.value = assets.map(withEquipmentPreset)
   }
 
+  async function refreshLicenses() {
+    licenses.value = await $fetch<LicenseRecord[]>('/api/licensing')
+  }
+
   onMounted(async () => {
     loading.value = true
     try {
-      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment()])
+      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment(), refreshLicenses()])
       await migrateLocalStorageIfNeeded()
-      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment()])
+      await Promise.all([refreshExpenses(), refreshInventory(), refreshEquipment(), refreshLicenses()])
       hydrated.value = true
       await refreshAll()
     } finally {
@@ -209,12 +215,15 @@ export function useStore() {
   async function refreshAll() {
     loading.value = true
     try {
+      const { refreshMenu } = useMenu()
       await Promise.all([
         refreshOrders(),
         refreshTransactions(),
         refreshExpenses(),
         refreshInventory(),
         refreshEquipment(),
+        refreshLicenses(),
+        refreshMenu(),
       ])
     } finally {
       loading.value = false
@@ -447,6 +456,7 @@ export function useStore() {
     expenses,
     inventory,
     equipment,
+    licenses,
     stats,
     loading,
     hydrated,
@@ -455,6 +465,7 @@ export function useStore() {
     refreshExpenses,
     refreshInventory,
     refreshEquipment,
+    refreshLicenses,
     fetchOrder,
     placeOrder,
     updateOrderStatus,

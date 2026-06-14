@@ -1,5 +1,6 @@
 export const INVENTORY_PRESETS = [
   'Hot Dogs',
+  'Wieners',
   'Buns',
   'Napkins',
   'Trays',
@@ -54,6 +55,7 @@ export function defaultOzPerServing(preset: string | null | undefined): number |
 /** Items tracked by pack with expiration dates */
 export const PERISHABLE_PRESETS = [
   'Hot Dogs',
+  'Wieners',
   'Buns',
   'Onions',
   'Tomatoes',
@@ -67,7 +69,11 @@ export function normalizeInventoryName(name: string): string {
 const PRESET_MATCHERS: { preset: InventoryPreset; keywords: RegExp[] }[] = [
   {
     preset: 'Hot Dogs',
-    keywords: [/\bhot\s*dogs?\b/i, /\bfranks?\b/i, /\bfrankfurters?\b/i, /\bwiener\b/i],
+    keywords: [/\bhot\s*dogs?\b/i, /\bbeef\s*franks?\b/i, /\bfrankfurters?\b/i, /\bhebrew\s*national\b/i],
+  },
+  {
+    preset: 'Wieners',
+    keywords: [/\bwieners?\b/i, /\boscar\s*mayer\b/i, /\bclassic\s*wieners?\b/i],
   },
   {
     preset: 'Buns',

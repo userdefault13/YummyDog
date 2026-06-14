@@ -1,4 +1,3 @@
-import { TAX_RATE } from '~/data/menu'
 import type { OrderItem } from '~/types'
 import { amountsMatch } from '../utils/stripe'
 
@@ -7,9 +6,10 @@ export function verifyOrderAmounts(
   subtotal: number,
   tax: number,
   total: number,
+  taxRate: number,
 ): boolean {
   const calcSubtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const calcTax = calcSubtotal * TAX_RATE
+  const calcTax = calcSubtotal * taxRate
   const calcTotal = calcSubtotal + calcTax
 
   return (

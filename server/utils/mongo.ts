@@ -116,6 +116,12 @@ export async function ensureIndexes() {
     await db.collection('inventory').createIndex({ id: 1 }, { unique: true })
     await db.collection('inventory').createIndex({ updatedAt: -1 })
     await db.collection('equipment').createIndex({ id: 1 }, { unique: true })
+    await db.collection('menu').createIndex({ id: 1 }, { unique: true })
+    await db.collection('menu').createIndex({ category: 1, sortOrder: 1 })
+    await db.collection('menu').createIndex({ active: 1 })
+    await db.collection('menuSettings').createIndex({ id: 1 }, { unique: true })
+    await db.collection('licenses').createIndex({ id: 1 }, { unique: true })
+    await db.collection('licenses').createIndex({ applicableToYummydog: -1 })
   })
 }
 

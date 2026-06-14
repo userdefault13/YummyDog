@@ -1,4 +1,4 @@
-import type { EquipmentAsset, Expense, InventoryItem, InventoryPack } from '~/types'
+import type { EquipmentAsset, Expense, InventoryItem, InventoryPack, LicenseRecord, MenuItem, MenuSettings } from '~/types'
 import { ensureIndexes, withMongoRetry } from './mongo'
 
 function mapExpense(doc: Record<string, unknown>): Expense {
@@ -17,6 +17,18 @@ function mapInventoryItem(doc: Record<string, unknown>): InventoryItem {
 
 function mapEquipment(doc: Record<string, unknown>): EquipmentAsset {
   return doc as unknown as EquipmentAsset
+}
+
+function mapMenuItem(doc: Record<string, unknown>): MenuItem {
+  return doc as unknown as MenuItem
+}
+
+function mapMenuSettings(doc: Record<string, unknown>): MenuSettings {
+  return doc as unknown as MenuSettings
+}
+
+function mapLicense(doc: Record<string, unknown>): LicenseRecord {
+  return doc as unknown as LicenseRecord
 }
 
 export async function listExpenses(): Promise<Expense[]> {
@@ -180,6 +192,71 @@ export async function deleteEquipment(id: string): Promise<void> {
     if (result.deletedCount === 0) {
       throw createError({ statusCode: 404, statusMessage: 'Equipment not found' })
     }
+  })
+}
+
+export async function listMenu(): Promise<MenuItem[]> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const docs = await db.collection('menu').find({}).sort({ category: 1, sortOrder: 1 }).toArray()
+    return docs.map((d) => mapMenuItem(d as Record<string, unknown>))
+  })
+}
+
+export async function createMenuItem(item: MenuItem): Promise<MenuItem> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    await db.collection('menu').insertOne({ ...item })
+    return item
+  })
+}
+
+export async function updateMenuItem(item: MenuItem): Promise<MenuItem> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const result = await db.collection('menu').findOneAndReplace(
+      { id: item.id },
+      { ...item },
+      { returnDocument: 'after' },
+    )
+    if (!result) {
+      throw createError({ statusCode: 404, statusMessage: 'Menu item not found' })
+    }
+    return mapMenuItem(result as Record<string, unknown>)
+  })
+}
+
+export async function deleteMenuItem(id: string): Promise<void> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const result = await db.collection('menu').deleteOne({ id })
+    if (result.deletedCount === 0) {
+      throw createError({ statusCode: 404, statusMessage: 'Menu item not found' })
+    }
+  })
+}
+
+export async function getMenuSettings(): Promise<MenuSettings | null> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const doc = await db.collection('menuSettings').findOne({ id: 'default' })
+    return doc ? mapMenuSettings(doc as Record<string, unknown>) : null
+  })
+}
+
+export async function upsertMenuSettings(settings: MenuSettings): Promise<MenuSettings> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    await db.collection('menuSettings').replaceOne({ id: 'default' }, { ...settings }, { upsert: true })
+    return settings
+  })
+}
+
+export async function listLicenses(): Promise<LicenseRecord[]> {
+  await ensureIndexes()
+  return withMongoRetry(async (db) => {
+    const docs = await db.collection('licenses').find({}).sort({ applicableToYummydog: -1, title: 1 }).toArray()
+    return docs.map((d) => mapLicense(d as Record<string, unknown>))
   })
 }
 
