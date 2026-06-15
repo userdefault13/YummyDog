@@ -108,6 +108,8 @@ export async function ensureIndexes() {
     await db.collection('orders').createIndex({ id: 1 }, { unique: true })
     await db.collection('orders').createIndex({ pickupNumber: 1 })
     await db.collection('orders').createIndex({ createdAt: -1 })
+    await db.collection('orders').createIndex({ stripeSessionId: 1 }, { sparse: true })
+    await db.collection('orders').createIndex({ stripePaymentIntentId: 1 }, { sparse: true })
     await db.collection('transactions').createIndex({ id: 1 }, { unique: true })
     await db.collection('transactions').createIndex({ orderId: 1 })
     await db.collection('transactions').createIndex({ createdAt: -1 })

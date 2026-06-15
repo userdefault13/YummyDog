@@ -14,6 +14,7 @@
     "seed:licensing": "npx tsx scripts/seed-licensing.ts"
   },
   "dependencies": {
+    "@stripe/stripe-js": "^9.8.0",
     "html5-qrcode": "^2.3.8",
     "mongodb": "^7.3.0",
     "nuxt": "^3.16.2",

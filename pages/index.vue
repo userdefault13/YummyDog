@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import type { MenuCategory } from '~/types'
+import type { MenuCategory, MenuItem } from '~/types'
 import { formatMoney } from '~/utils/finance'
 import { filterHotDogsByProtein, type HotDogProtein } from '~/utils/menuProtein'
 
 const { addItem } = useCart()
+const { show: showToast } = useToast()
 const { activeItems, itemsByCategory, CATEGORIES, CATEGORY_LABELS } = useMenu()
 
 const protein = ref<HotDogProtein>('beef')
+
+function handleAddItem(item: MenuItem, quantity = 1) {
+  for (let i = 0; i < quantity; i += 1) {
+    addItem(item)
+  }
+
+  const label = quantity === 1 ? `1 × ${item.name} added` : `${quantity} × ${item.name} added`
+  showToast(label)
+}
 
 const filteredHotDogs = computed(() =>
   filterHotDogsByProtein(itemsByCategory('hotdogs'), protein.value),
@@ -39,6 +49,8 @@ const proteinToggleClass = (value: HotDogProtein) =>
         {{ featuredItem.description }}
       </p>
     </section>
+
+    <CustomerOrderSearch />
 
     <section v-for="category in CATEGORIES" :key="category" class="mb-8">
       <div v-if="category === 'hotdogs'" class="mb-3">
@@ -99,7 +111,7 @@ const proteinToggleClass = (value: HotDogProtein) =>
               <span class="shrink-0 font-bold text-brand-red">{{ formatMoney(item.price) }}</span>
             </div>
             <p class="mt-1 text-sm text-black/55">{{ item.description }}</p>
-            <UiButton variant="secondary" class="mt-3 !py-2 !text-xs" @click="addItem(item)">
+            <UiButton variant="secondary" class="mt-3 !py-2 !text-xs" @click="handleAddItem(item)">
               Add to order
             </UiButton>
           </div>

@@ -79,14 +79,16 @@ const isCancelled = computed(() => order.value?.status === 'cancelled')
 <template>
   <div class="mx-auto max-w-lg px-4 pb-12 pt-4">
     <div v-if="loading" class="flex flex-col items-center py-16">
-      <div class="h-10 w-10 animate-spin rounded-full border-4 border-brand-red/20 border-t-brand-red" />
-      <p class="mt-4 text-sm text-black/55">Loading your order…</p>
+      <UiLoader label="Loading your order…" size="lg" />
     </div>
 
     <template v-else-if="order">
       <div class="text-center">
         <p class="text-sm font-medium uppercase tracking-wide text-black/45">Waiting for order</p>
         <h1 class="mt-1 text-2xl font-bold">{{ order.customerName }}</h1>
+        <p class="mt-3 text-sm leading-relaxed text-black/55">
+          Thanks for your business! We're firing up the grill and will have your order ready soon.
+        </p>
         <p v-if="isReady" class="mt-3 text-5xl font-black text-brand-red">
           #{{ order.pickupNumber }}
         </p>

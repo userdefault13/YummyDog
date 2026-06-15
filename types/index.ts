@@ -59,6 +59,15 @@ export interface OrderItem {
   quantity: number
 }
 
+export interface OrderStageTimings {
+  acceptedAt: string
+  grillAt?: string
+  preparingAt?: string
+  readyAt?: string
+  completedAt?: string
+  cancelledAt?: string
+}
+
 export interface Order {
   id: string
   pickupNumber: number
@@ -74,6 +83,8 @@ export interface Order {
   updatedAt: string
   notes?: string
   stripeSessionId?: string
+  stripePaymentIntentId?: string
+  statusTimings?: OrderStageTimings
 }
 
 export interface Transaction {
@@ -83,6 +94,7 @@ export interface Transaction {
   type: 'sale' | 'refund'
   method: 'stripe' | 'card' | 'cash' | 'mobile'
   stripeSessionId?: string
+  stripePaymentIntentId?: string
   createdAt: string
 }
 
@@ -151,6 +163,16 @@ export interface BusinessStats {
   todayRevenue: number
   todayOrders: number
   topItems: { name: string; quantity: number }[]
+  kitchenEfficiency: KitchenEfficiencyStats
+}
+
+export interface KitchenEfficiencyStats {
+  sampleSize: number
+  avgKitchenMs: number
+  avgAcceptedMs: number
+  avgGrillMs: number
+  avgPreparingMs: number
+  avgReadyHoldMs: number
 }
 
 export type InventoryUnit = 'each' | 'pack' | 'case' | 'lb' | 'oz' | 'gallon' | 'roll'
@@ -214,4 +236,5 @@ export interface CreateOrderInput {
   notes?: string
   paymentMethod: Transaction['method']
   stripeSessionId?: string
+  stripePaymentIntentId?: string
 }

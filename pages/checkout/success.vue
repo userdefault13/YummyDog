@@ -6,12 +6,51 @@ const { clearCart } = useCart()
 const status = ref<'loading' | 'success' | 'error'>('loading')
 const error = ref('')
 
+async function finalizeOrder(
+  verified: {
+    orderId: string
+    customerName: string
+    phone?: string
+    email?: string
+    notes?: string
+    items: Parameters<typeof placeOrder>[0]['items']
+    subtotal: number
+    tax: number
+    total: number
+    stripeSessionId?: string
+    stripePaymentIntentId?: string
+  },
+) {
+  const order = await placeOrder({
+    id: verified.orderId,
+    customerName: verified.customerName,
+    phone: verified.phone,
+    email: verified.email,
+    items: verified.items,
+    subtotal: verified.subtotal,
+    tax: verified.tax,
+    total: verified.total,
+    notes: verified.notes,
+    paymentMethod: 'stripe',
+    stripeSessionId: verified.stripeSessionId,
+    stripePaymentIntentId: verified.stripePaymentIntentId,
+  })
+
+  clearCart()
+  status.value = 'success'
+  await navigateTo(`/waiting/${order.id}`, { replace: true })
+}
+
 onMounted(async () => {
   const sessionId = route.query.session_id
+  const paymentIntentId = route.query.payment_intent
 
-  if (!sessionId || typeof sessionId !== 'string') {
+  if (
+    (!sessionId || typeof sessionId !== 'string')
+    && (!paymentIntentId || typeof paymentIntentId !== 'string')
+  ) {
     status.value = 'error'
-    error.value = 'Missing payment session.'
+    error.value = 'Missing payment confirmation.'
     return
   }
 
@@ -26,26 +65,15 @@ onMounted(async () => {
       subtotal: number
       tax: number
       total: number
-      stripeSessionId: string
-    }>('/api/stripe/verify', { query: { session_id: sessionId } })
-
-    const order = await placeOrder({
-      id: verified.orderId,
-      customerName: verified.customerName,
-      phone: verified.phone,
-      email: verified.email,
-      items: verified.items,
-      subtotal: verified.subtotal,
-      tax: verified.tax,
-      total: verified.total,
-      notes: verified.notes,
-      paymentMethod: 'stripe',
-      stripeSessionId: verified.stripeSessionId,
+      stripeSessionId?: string
+      stripePaymentIntentId?: string
+    }>('/api/stripe/verify', {
+      query: paymentIntentId
+        ? { payment_intent: paymentIntentId }
+        : { session_id: sessionId },
     })
 
-    clearCart()
-    status.value = 'success'
-    await navigateTo(`/waiting/${order.id}`, { replace: true })
+    await finalizeOrder(verified)
   } catch (e: unknown) {
     status.value = 'error'
     error.value = e instanceof Error ? e.message : 'Could not verify your payment.'
@@ -56,8 +84,7 @@ onMounted(async () => {
 <template>
   <div class="mx-auto flex max-w-lg flex-col items-center px-4 py-16 text-center">
     <template v-if="status === 'loading'">
-      <div class="h-10 w-10 animate-spin rounded-full border-4 border-brand-red/20 border-t-brand-red" />
-      <p class="mt-4 text-black/55">Confirming your payment…</p>
+      <UiLoader label="Confirming your payment…" size="lg" />
     </template>
     <template v-else-if="status === 'error'">
       <span class="text-4xl">⚠️</span>

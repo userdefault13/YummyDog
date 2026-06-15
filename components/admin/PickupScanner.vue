@@ -3,11 +3,9 @@ import type { Order, Transaction } from '~/types'
 import { formatMoney } from '~/utils/finance'
 import { ADMIN_COLUMNS } from '~/utils/orderStatus'
 
-const emit = defineEmits<{ close: [] }>()
-
 const { updateOrderStatus, refreshAll } = useStore()
 
-const scannerId = 'pos-qr-scanner'
+const scannerId = 'orders-pickup-qr-scanner'
 const scanning = ref(false)
 const cameraError = ref('')
 const lookupError = ref('')
@@ -120,80 +118,68 @@ function resetLookup() {
   manualCode.value = ''
 }
 
-async function handleClose() {
-  await stopScanner()
-  emit('close')
-}
-
 onUnmounted(() => {
   void stopScanner()
 })
 </script>
 
 <template>
-  <div class="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-    <UiCard class="max-h-[90vh] w-full max-w-lg overflow-y-auto p-4 shadow-xl">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <p class="font-semibold">Scan pickup QR</p>
-          <p class="mt-1 text-sm text-black/55">
-            Look up a mobile order to mark it picked up.
-          </p>
+  <section class="mt-8 border-t border-black/5 pt-8">
+    <div class="mb-4">
+      <h2 class="text-lg font-bold">Scan pickup QR</h2>
+      <p class="text-sm text-black/55">
+        Scan a customer's order QR or enter today's pickup number to mark it picked up.
+      </p>
+    </div>
+
+    <div class="grid gap-4 lg:grid-cols-2">
+      <UiCard class="p-4">
+        <div v-if="!scanning && !order">
+          <UiButton type="button" full-width variant="secondary" @click="startScanner">
+            Open camera scanner
+          </UiButton>
         </div>
-        <button
-          type="button"
-          class="shrink-0 rounded-lg px-2 py-1 text-sm text-black/45 hover:bg-black/5 hover:text-brand-charcoal"
-          @click="handleClose"
-        >
-          Close
-        </button>
-      </div>
 
-      <div v-if="!scanning && !order" class="mt-4">
-        <UiButton type="button" full-width variant="secondary" @click="startScanner">
-          Open camera scanner
-        </UiButton>
-      </div>
-
-      <div
-        v-show="scanning"
-        :id="scannerId"
-        class="mt-4 overflow-hidden rounded-xl bg-black/5"
-      />
-
-      <p v-if="cameraError" class="mt-3 text-sm text-amber-800">{{ cameraError }}</p>
-
-      <div v-if="scanning" class="mt-3">
-        <UiButton type="button" variant="ghost" class="!py-2" @click="stopScanner">
-          Stop camera
-        </UiButton>
-      </div>
-
-      <form class="mt-4 flex gap-2" @submit.prevent="submitManual">
-        <input
-          v-model="manualCode"
-          type="text"
-          inputmode="numeric"
-          placeholder="Pickup # or paste code"
-          class="flex-1 rounded-xl border border-black/10 bg-brand-cream px-4 py-2.5 text-sm outline-none focus:border-brand-red"
+        <div
+          v-show="scanning"
+          :id="scannerId"
+          class="overflow-hidden rounded-xl bg-black/5"
         />
-        <UiButton type="submit" variant="secondary" class="!px-4 !py-2.5" :disabled="loading">
-          Look up
-        </UiButton>
-      </form>
 
-      <p v-if="loading" class="mt-4 text-center text-sm text-black/50">Loading order…</p>
-      <p v-if="lookupError" class="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-        {{ lookupError }}
-      </p>
-      <p v-if="pickedUpMessage" class="mt-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
-        {{ pickedUpMessage }}
-      </p>
+        <p v-if="cameraError" class="mt-3 text-sm text-amber-800">{{ cameraError }}</p>
 
-      <UiCard v-if="order" class="mt-4 p-4">
+        <div v-if="scanning" class="mt-3">
+          <UiButton type="button" variant="ghost" class="!py-2" @click="stopScanner">
+            Stop camera
+          </UiButton>
+        </div>
+
+        <form class="mt-4 flex gap-2" @submit.prevent="submitManual">
+          <input
+            v-model="manualCode"
+            type="text"
+            inputmode="numeric"
+            placeholder="Pickup # or paste code"
+            class="flex-1 rounded-xl border border-black/10 bg-brand-cream px-4 py-2.5 text-sm outline-none focus:border-brand-red"
+          />
+          <UiButton type="submit" variant="secondary" class="!px-4 !py-2.5" :disabled="loading">
+            Look up
+          </UiButton>
+        </form>
+
+        <p v-if="loading" class="mt-4 text-center text-sm text-black/50">Loading order…</p>
+        <p v-if="lookupError" class="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          {{ lookupError }}
+        </p>
+        <p v-if="pickedUpMessage" class="mt-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
+          {{ pickedUpMessage }}
+        </p>
+      </UiCard>
+
+      <UiCard v-if="order" class="p-4">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <p class="text-2xl font-black text-brand-red">#{{ order.pickupNumber }}</p>
+            <p class="text-3xl font-black text-brand-red">#{{ order.pickupNumber }}</p>
             <p class="font-semibold">{{ order.customerName }}</p>
             <p class="text-sm text-black/55">{{ statusLabel }}</p>
           </div>
@@ -221,6 +207,8 @@ onUnmounted(() => {
           </p>
         </div>
 
+        <AdminOrderTimer class="mt-4" :order="order" />
+
         <div class="mt-4 flex flex-col gap-2 sm:flex-row">
           <UiButton v-if="canMarkPickedUp" full-width :disabled="loading" @click="markPickedUp">
             Mark picked up
@@ -234,6 +222,10 @@ onUnmounted(() => {
           Already picked up
         </p>
       </UiCard>
-    </UiCard>
-  </div>
+
+      <UiCard v-else class="flex items-center justify-center p-8 text-center text-sm text-black/40">
+        Scan or look up an order to see details here.
+      </UiCard>
+    </div>
+  </section>
 </template>

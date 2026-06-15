@@ -1,69 +1,63 @@
-import type { OrderItem } from '~/types'
-import { verifyOrderAmounts } from '../../utils/order'
+import { parseStripeOrderMetadata, verifyStripeOrderAmounts } from '../../utils/stripeOrder'
 import { useStripeClient } from '../../utils/stripe'
-import { resolveTaxRate } from '../../utils/menuSettings'
 
 export default defineEventHandler(async (event) => {
-  const sessionId = getQuery(event).session_id
+  const query = getQuery(event)
+  const sessionId = query.session_id
+  const paymentIntentId = query.payment_intent
 
-  if (!sessionId || typeof sessionId !== 'string') {
-    throw createError({ statusCode: 400, statusMessage: 'Missing session_id' })
+  if (paymentIntentId && typeof paymentIntentId === 'string') {
+    const stripe = useStripeClient()
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+
+    if (paymentIntent.status !== 'succeeded') {
+      throw createError({ statusCode: 402, statusMessage: 'Payment not completed' })
+    }
+
+    const order = parseStripeOrderMetadata(paymentIntent.metadata)
+    await verifyStripeOrderAmounts(order, paymentIntent.amount_received)
+
+    return {
+      orderId: order.orderId,
+      customerName: order.customerName,
+      phone: order.phone,
+      email: order.email || paymentIntent.receipt_email || undefined,
+      notes: order.notes,
+      items: order.items,
+      subtotal: order.subtotal,
+      tax: order.tax,
+      total: order.total,
+      stripePaymentIntentId: paymentIntent.id,
+      paymentStatus: paymentIntent.status,
+    }
   }
 
-  const stripe = useStripeClient()
-  const session = await stripe.checkout.sessions.retrieve(sessionId)
+  if (sessionId && typeof sessionId === 'string') {
+    const stripe = useStripeClient()
+    const session = await stripe.checkout.sessions.retrieve(sessionId)
 
-  if (session.payment_status !== 'paid') {
-    throw createError({ statusCode: 402, statusMessage: 'Payment not completed' })
+    if (session.payment_status !== 'paid') {
+      throw createError({ statusCode: 402, statusMessage: 'Payment not completed' })
+    }
+
+    const order = parseStripeOrderMetadata(session.metadata)
+    const paidCents = session.amount_total ?? 0
+    await verifyStripeOrderAmounts(order, paidCents)
+
+    return {
+      orderId: order.orderId,
+      customerName: order.customerName,
+      phone: order.phone,
+      email: order.email || session.customer_details?.email || undefined,
+      notes: order.notes,
+      items: order.items,
+      subtotal: order.subtotal,
+      tax: order.tax,
+      total: order.total,
+      stripeSessionId: session.id,
+      paymentStatus: session.payment_status,
+    }
   }
 
-  const {
-    orderId,
-    customerName,
-    phone,
-    email,
-    notes,
-    itemsJson,
-    subtotal,
-    tax,
-    total,
-  } = session.metadata ?? {}
-
-  if (!orderId || !customerName || !itemsJson || !subtotal || !tax || !total) {
-    throw createError({ statusCode: 500, statusMessage: 'Checkout session is missing order metadata' })
-  }
-
-  let items: OrderItem[]
-  try {
-    items = JSON.parse(itemsJson) as OrderItem[]
-  } catch {
-    throw createError({ statusCode: 500, statusMessage: 'Invalid order items in session metadata' })
-  }
-
-  const parsedSubtotal = parseFloat(subtotal)
-  const parsedTax = parseFloat(tax)
-  const parsedTotal = parseFloat(total)
-
-  if (!verifyOrderAmounts(items, parsedSubtotal, parsedTax, parsedTotal, await resolveTaxRate())) {
-    throw createError({ statusCode: 400, statusMessage: 'Order totals mismatch' })
-  }
-
-  const expectedCents = Math.round(parsedTotal * 100)
-  if (session.amount_total !== expectedCents) {
-    throw createError({ statusCode: 400, statusMessage: 'Paid amount does not match order total' })
-  }
-
-  return {
-    orderId,
-    customerName,
-    phone: phone || undefined,
-    email: email || session.customer_details?.email || undefined,
-    notes: notes || undefined,
-    items,
-    subtotal: parsedSubtotal,
-    tax: parsedTax,
-    total: parsedTotal,
-    stripeSessionId: session.id,
-    paymentStatus: session.payment_status,
-  }
+  throw createError({ statusCode: 400, statusMessage: 'Missing payment_intent or session_id' })
 })

@@ -2,28 +2,47 @@
 import type { Transaction } from '~/types'
 import { formatMoney } from '~/utils/finance'
 import { filterHotDogsByProtein, type HotDogProtein } from '~/utils/menuProtein'
+import { isValidPhone, normalizePhone } from '~/utils/contact'
 
-const PAYMENT_METHODS: { id: Transaction['method']; label: string }[] = [
+const PAYMENT_METHODS: { id: 'cash' | 'card' | 'mobile'; label: string }[] = [
   { id: 'cash', label: 'Cash' },
   { id: 'card', label: 'Card' },
   { id: 'mobile', label: 'Mobile pay' },
 ]
 
+const config = useRuntimeConfig()
 const { placeOrder } = useStore()
 const { itemsByCategory, CATEGORIES, CATEGORY_LABELS } = useMenu()
 const { lines, itemCount, subtotal, tax, total, addItem, setQuantity, clearCart } = usePosCart()
 
 const protein = ref<HotDogProtein>('beef')
-const customerName = ref('Walk-in')
+const customerName = ref('')
+const customerPhone = ref('')
 const notes = ref('')
-const paymentMethod = ref<Transaction['method']>('cash')
+const paymentMethod = ref<'cash' | 'card' | 'mobile'>('cash')
 const submitting = ref(false)
 const error = ref('')
+const contactError = ref('')
 const successPickup = ref<number | null>(null)
-const showPickupScanner = ref(false)
+
+const stripeForm = ref<{ confirm: (returnUrl: string) => Promise<string> } | null>(null)
+const stripeClientSecret = ref('')
+const stripeOrderId = ref('')
+const stripeLoading = ref(false)
+const stripeReady = ref(false)
+
+const stripeConfigured = computed(() => Boolean(config.public.stripePublishableKey))
 
 const filteredHotDogs = computed(() =>
   filterHotDogsByProtein(itemsByCategory('hotdogs'), protein.value),
+)
+
+const canUseCardPayment = computed(
+  () => Boolean(customerName.value.trim()) && isValidPhone(customerPhone.value),
+)
+
+const showCardForm = computed(
+  () => paymentMethod.value === 'card' && canUseCardPayment.value && Boolean(stripeClientSecret.value),
 )
 
 function menuItemsForCategory(category: (typeof CATEGORIES)[number]) {
@@ -36,43 +55,195 @@ const proteinToggleClass = (value: HotDogProtein) =>
     ? 'bg-brand-charcoal text-white shadow-sm'
     : 'text-black/55 hover:text-brand-charcoal'
 
-async function chargeOrder() {
-  if (!lines.value.length) return
-
-  const name = customerName.value.trim() || 'Walk-in'
-  error.value = ''
-  submitting.value = true
-  successPickup.value = null
-
-  try {
-    const orderItems = lines.value.map(({ item, quantity }) => ({
+function buildOrderPayload() {
+  return {
+    customerName: customerName.value.trim(),
+    phone: normalizePhone(customerPhone.value),
+    notes: notes.value.trim() || undefined,
+    items: lines.value.map(({ item, quantity }) => ({
       menuItemId: item.id,
       name: item.name,
       price: item.price,
       quantity,
-    }))
+    })),
+    subtotal: subtotal.value,
+    tax: tax.value,
+    total: total.value,
+  }
+}
+
+async function ensureStripePaymentIntent() {
+  if (!stripeConfigured.value) {
+    throw new Error('Stripe is not configured.')
+  }
+
+  const orderId = stripeOrderId.value || crypto.randomUUID()
+  stripeOrderId.value = orderId
+
+  stripeLoading.value = true
+  try {
+    const result = await $fetch<{ clientSecret: string; orderId: string }>('/api/stripe/payment-intent', {
+      method: 'POST',
+      body: {
+        orderId,
+        ...buildOrderPayload(),
+      },
+    })
+    stripeClientSecret.value = result.clientSecret
+    stripeOrderId.value = result.orderId
+  } finally {
+    stripeLoading.value = false
+  }
+}
+
+watch(
+  [paymentMethod, canUseCardPayment, total],
+  async ([method, valid]) => {
+    if (method !== 'card' || !valid || !stripeConfigured.value || !lines.value.length) {
+      stripeClientSecret.value = ''
+      stripeReady.value = false
+      return
+    }
+
+    try {
+      await ensureStripePaymentIntent()
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Could not load card form.'
+    }
+  },
+)
+
+function selectPaymentMethod(method: 'cash' | 'card' | 'mobile') {
+  contactError.value = ''
+
+  if (method === 'card') {
+    if (!customerName.value.trim() || !customerPhone.value.trim()) {
+      contactError.value = 'Enter customer name and phone number first.'
+      return
+    }
+    if (!isValidPhone(customerPhone.value)) {
+      contactError.value = 'Enter a valid 10-digit phone number.'
+      return
+    }
+    if (!stripeConfigured.value) {
+      error.value = 'Stripe is not configured for card payments.'
+      return
+    }
+  }
+
+  paymentMethod.value = method
+  error.value = ''
+
+  if (method !== 'card') {
+    stripeClientSecret.value = ''
+    stripeReady.value = false
+  }
+}
+
+async function completeStripeOrder(paymentIntentId: string) {
+  const verified = await $fetch<{
+    orderId: string
+    customerName: string
+    phone?: string
+    notes?: string
+    items: Parameters<typeof placeOrder>[0]['items']
+    subtotal: number
+    tax: number
+    total: number
+    stripePaymentIntentId: string
+  }>('/api/stripe/verify', { query: { payment_intent: paymentIntentId } })
+
+  return placeOrder({
+    id: verified.orderId,
+    customerName: verified.customerName,
+    phone: verified.phone,
+    items: verified.items,
+    subtotal: verified.subtotal,
+    tax: verified.tax,
+    total: verified.total,
+    notes: verified.notes,
+    paymentMethod: 'stripe',
+    stripePaymentIntentId: verified.stripePaymentIntentId,
+  })
+}
+
+async function chargeOrder() {
+  if (!lines.value.length) return
+
+  error.value = ''
+  contactError.value = ''
+  submitting.value = true
+  successPickup.value = null
+
+  try {
+    if (paymentMethod.value === 'card') {
+      if (!canUseCardPayment.value) {
+        contactError.value = 'Enter customer name and phone number for card payment.'
+        return
+      }
+
+      if (!stripeClientSecret.value) {
+        await ensureStripePaymentIntent()
+      }
+
+      if (!stripeForm.value) {
+        error.value = 'Card form is not available.'
+        return
+      }
+
+      if (!stripeReady.value) {
+        error.value = 'Card form is still loading. Please wait a moment.'
+        return
+      }
+
+      const returnUrl = `${window.location.origin}/admin?tab=pos&payment_intent={PAYMENT_INTENT_ID}`
+      const paymentIntentId = await stripeForm.value.confirm(returnUrl)
+      const order = await completeStripeOrder(paymentIntentId)
+      successPickup.value = order.pickupNumber
+      clearCart()
+      customerName.value = ''
+      customerPhone.value = ''
+      notes.value = ''
+      paymentMethod.value = 'cash'
+      stripeClientSecret.value = ''
+      return
+    }
+
+    if (!customerName.value.trim()) {
+      contactError.value = 'Enter customer name.'
+      return
+    }
+
+    if (!isValidPhone(customerPhone.value)) {
+      contactError.value = 'Enter a valid phone number.'
+      return
+    }
 
     const order = await placeOrder({
-      customerName: name,
-      phone: '5625550100',
-      items: orderItems,
-      subtotal: subtotal.value,
-      tax: tax.value,
-      total: total.value,
-      notes: notes.value.trim() || undefined,
-      paymentMethod: paymentMethod.value,
+      ...buildOrderPayload(),
+      paymentMethod: paymentMethod.value as Transaction['method'],
     })
 
     successPickup.value = order.pickupNumber
     clearCart()
+    customerName.value = ''
+    customerPhone.value = ''
     notes.value = ''
   } catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; statusMessage?: string }
-    error.value = err.data?.statusMessage ?? err.statusMessage ?? 'Could not place order.'
+    error.value = err.data?.statusMessage ?? err.statusMessage ?? (e instanceof Error ? e.message : 'Could not place order.')
   } finally {
     submitting.value = false
   }
 }
+
+const chargeDisabled = computed(() => {
+  if (submitting.value || !lines.value.length) return true
+  if (paymentMethod.value === 'card') {
+    return stripeLoading.value || (Boolean(stripeClientSecret.value) && !stripeReady.value)
+  }
+  return false
+})
 
 function dismissSuccess() {
   successPickup.value = null
@@ -86,9 +257,6 @@ function dismissSuccess() {
         <h2 class="text-lg font-bold">Web POS</h2>
         <p class="text-sm text-black/55">Ring up walk-up customers at the stand.</p>
       </div>
-      <UiButton type="button" variant="secondary" class="!py-2.5" @click="showPickupScanner = true">
-        Scan pickup QR
-      </UiButton>
     </div>
 
     <p
@@ -105,7 +273,6 @@ function dismissSuccess() {
     <p v-if="error" class="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</p>
 
     <div class="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <!-- Menu -->
       <div class="space-y-6">
         <section v-for="category in CATEGORIES" :key="category">
           <div v-if="category === 'hotdogs'" class="mb-3">
@@ -161,7 +328,6 @@ function dismissSuccess() {
         </section>
       </div>
 
-      <!-- Cart -->
       <aside class="lg:sticky lg:top-24 lg:self-start">
         <UiCard class="p-4">
           <div class="flex items-center justify-between">
@@ -222,8 +388,22 @@ function dismissSuccess() {
               <input
                 v-model="customerName"
                 type="text"
-                placeholder="Walk-in"
+                placeholder="Customer name"
                 class="mt-1 w-full rounded-xl border border-black/10 bg-brand-cream px-3 py-2 text-sm outline-none focus:border-brand-red"
+                @input="contactError = ''"
+              />
+            </label>
+
+            <label class="block text-xs text-black/45">
+              Phone number
+              <input
+                v-model="customerPhone"
+                type="tel"
+                inputmode="tel"
+                autocomplete="tel"
+                placeholder="(555) 123-4567"
+                class="mt-1 w-full rounded-xl border border-black/10 bg-brand-cream px-3 py-2 text-sm outline-none focus:border-brand-red"
+                @input="contactError = ''"
               />
             </label>
 
@@ -237,6 +417,8 @@ function dismissSuccess() {
               />
             </label>
 
+            <p v-if="contactError" class="text-xs text-brand-red">{{ contactError }}</p>
+
             <div>
               <p class="text-xs text-black/45">Payment</p>
               <div class="mt-2 flex gap-1">
@@ -244,21 +426,45 @@ function dismissSuccess() {
                   v-for="m in PAYMENT_METHODS"
                   :key="m.id"
                   type="button"
-                  class="flex-1 rounded-lg border px-2 py-2 text-xs font-medium transition"
+                  class="flex-1 rounded-lg border px-2 py-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40"
                   :class="
                     paymentMethod === m.id
                       ? 'border-brand-red bg-brand-red/10 text-brand-red'
                       : 'border-black/10 hover:bg-black/5'
                   "
-                  @click="paymentMethod = m.id"
+                  :disabled="m.id === 'card' && !stripeConfigured"
+                  @click="selectPaymentMethod(m.id)"
                 >
                   {{ m.label }}
                 </button>
               </div>
+              <p v-if="paymentMethod === 'card' && !canUseCardPayment" class="mt-2 text-xs text-black/45">
+                Enter name and phone to load the card form.
+              </p>
             </div>
 
-            <UiButton full-width :disabled="submitting" @click="chargeOrder">
-              {{ submitting ? 'Processing…' : `Charge ${formatMoney(total)}` }}
+            <div v-if="paymentMethod === 'card' && stripeLoading" class="py-2">
+              <UiLoader label="Loading card form…" size="sm" />
+            </div>
+
+            <div v-else-if="showCardForm" class="rounded-xl border border-black/10 bg-white p-3">
+              <p class="mb-2 text-xs font-medium text-black/50">Card details</p>
+              <CheckoutStripePaymentForm
+                ref="stripeForm"
+                :client-secret="stripeClientSecret"
+                @ready="stripeReady = true"
+                @loading="stripeReady = false"
+              />
+            </div>
+
+            <UiButton full-width :disabled="chargeDisabled" @click="chargeOrder">
+              {{
+                submitting
+                  ? 'Processing…'
+                  : paymentMethod === 'card'
+                    ? `Charge card ${formatMoney(total)}`
+                    : `Charge ${formatMoney(total)}`
+              }}
             </UiButton>
 
             <UiButton full-width variant="ghost" class="!py-2" @click="clearCart">
@@ -268,7 +474,5 @@ function dismissSuccess() {
         </UiCard>
       </aside>
     </div>
-
-    <AdminPosPickupScanner v-if="showPickupScanner" @close="showPickupScanner = false" />
   </div>
 </template>

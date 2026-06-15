@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatMoney } from '~/utils/finance'
+import { formatDuration } from '~/utils/orderTiming'
 
 const { stats } = useStore()
 
@@ -16,6 +17,34 @@ const statCards = computed(() => [
   { label: 'Net profit', value: formatMoney(stats.value.netProfit), accent: 'text-brand-mustard' },
 ])
 
+const kitchenStats = computed(() => [
+  {
+    label: 'Avg kitchen time',
+    hint: 'Accepted → ready',
+    value: formatDuration(stats.value.kitchenEfficiency.avgKitchenMs, true),
+  },
+  {
+    label: 'Avg accepted',
+    hint: 'Queue before grill',
+    value: formatDuration(stats.value.kitchenEfficiency.avgAcceptedMs, true),
+  },
+  {
+    label: 'Avg on grill',
+    hint: 'Grill stage',
+    value: formatDuration(stats.value.kitchenEfficiency.avgGrillMs, true),
+  },
+  {
+    label: 'Avg preparing',
+    hint: 'Assembly stage',
+    value: formatDuration(stats.value.kitchenEfficiency.avgPreparingMs, true),
+  },
+  {
+    label: 'Avg ready hold',
+    hint: 'Ready → picked up',
+    value: formatDuration(stats.value.kitchenEfficiency.avgReadyHoldMs, true),
+  },
+])
+
 const maxTopQty = computed(() => stats.value.topItems[0]?.quantity ?? 1)
 </script>
 
@@ -27,6 +56,27 @@ const maxTopQty = computed(() => stats.value.topItems[0]?.quantity ?? 1)
         <p class="mt-1 text-xl font-bold" :class="s.accent">{{ s.value }}</p>
       </UiCard>
     </div>
+
+    <UiCard class="p-4">
+      <h3 class="font-semibold">Kitchen efficiency</h3>
+      <p class="mt-1 text-xs text-black/45">
+        Average stage times from {{ stats.kitchenEfficiency.sampleSize }} completed orders with timing data.
+      </p>
+      <div v-if="stats.kitchenEfficiency.sampleSize === 0" class="mt-3 text-sm text-black/40">
+        Complete orders through the kitchen pipeline to collect timing data.
+      </div>
+      <div v-else class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          v-for="item in kitchenStats"
+          :key="item.label"
+          class="rounded-xl border border-black/5 bg-brand-cream/40 px-3 py-3"
+        >
+          <p class="text-xs uppercase tracking-wide text-black/45">{{ item.label }}</p>
+          <p class="mt-1 font-mono text-lg font-bold text-brand-charcoal">{{ item.value }}</p>
+          <p class="mt-0.5 text-[11px] text-black/40">{{ item.hint }}</p>
+        </div>
+      </div>
+    </UiCard>
 
     <UiCard class="p-4">
       <h3 class="font-semibold">Top sellers</h3>

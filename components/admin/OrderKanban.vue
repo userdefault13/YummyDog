@@ -29,8 +29,9 @@ function nextLabel(status: OrderStatus) {
 </script>
 
 <template>
-  <div class="overflow-x-auto pb-4">
-    <div class="flex min-w-max gap-4 md:min-w-0 md:grid md:grid-cols-5">
+  <div>
+    <div class="overflow-x-auto pb-4">
+      <div class="flex min-w-max gap-4 md:min-w-0 md:grid md:grid-cols-5">
       <div
         v-for="{ status, label, color } in ADMIN_COLUMNS"
         :key="status"
@@ -67,6 +68,7 @@ function nextLabel(status: OrderStatus) {
                 {{ item.quantity }}× {{ item.name }}
               </li>
             </ul>
+            <AdminOrderTimer class="mt-3" :order="order" />
             <p
               v-if="order.notes"
               class="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-800"
@@ -95,5 +97,9 @@ function nextLabel(status: OrderStatus) {
         </div>
       </div>
     </div>
+    </div>
+
+    <AdminReadyPickupGrid />
+    <AdminPickupScanner />
   </div>
 </template>

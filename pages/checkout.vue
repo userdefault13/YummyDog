@@ -10,7 +10,7 @@ import {
 } from '~/utils/contact'
 
 const PAYMENT_METHODS: { id: Transaction['method']; label: string; hint?: string }[] = [
-  { id: 'stripe', label: '💳 Pay with card', hint: 'Secure checkout via Stripe' },
+  { id: 'stripe', label: '💳 Pay with card', hint: 'Enter card details below' },
   { id: 'cash', label: '💵 Cash', hint: 'Pay at the window' },
   { id: 'mobile', label: '📱 Mobile pay', hint: 'Apple Pay / Google Pay at window' },
 ]
@@ -33,6 +33,12 @@ const contactError = ref('')
 const phoneError = ref('')
 const emailError = ref('')
 
+const stripeForm = ref<{ confirm: (returnUrl: string) => Promise<string> } | null>(null)
+const stripeClientSecret = ref('')
+const stripeOrderId = ref('')
+const stripeLoading = ref(false)
+const stripeReady = ref(false)
+
 const stripeConfigured = computed(() => Boolean(config.public.stripePublishableKey))
 
 onMounted(() => {
@@ -44,7 +50,77 @@ onMounted(() => {
   }
 })
 
-async function handleSubmit() {
+const canSubmit = computed(
+  () =>
+    name.value.trim() &&
+    hasContactMethod(phone.value, email.value) &&
+    (!phone.value.trim() || isValidPhone(phone.value)) &&
+    (!email.value.trim() || isValidEmail(normalizeEmail(email.value))),
+)
+
+function buildOrderPayload() {
+  const phoneValue = normalizePhone(phone.value)
+  const emailValue = normalizeEmail(email.value)
+
+  return {
+    customerName: name.value.trim(),
+    phone: phoneValue || undefined,
+    email: emailValue || undefined,
+    notes: notes.value.trim() || undefined,
+    items: lines.value.map(({ item, quantity }) => ({
+      menuItemId: item.id,
+      name: item.name,
+      price: item.price,
+      quantity,
+    })),
+    subtotal: subtotal.value,
+    tax: tax.value,
+    total: total.value,
+  }
+}
+
+async function ensureStripePaymentIntent() {
+  if (!stripeConfigured.value) {
+    throw new Error('Stripe is not configured yet. Add your keys to .env and restart the dev server.')
+  }
+
+  const orderId = stripeOrderId.value || crypto.randomUUID()
+  stripeOrderId.value = orderId
+
+  stripeLoading.value = true
+  try {
+    const result = await $fetch<{ clientSecret: string; orderId: string }>('/api/stripe/payment-intent', {
+      method: 'POST',
+      body: {
+        orderId,
+        ...buildOrderPayload(),
+      },
+    })
+    stripeClientSecret.value = result.clientSecret
+    stripeOrderId.value = result.orderId
+  } finally {
+    stripeLoading.value = false
+  }
+}
+
+watch(
+  [paymentMethod, canSubmit, total],
+  async ([method, valid]) => {
+    if (method !== 'stripe' || !valid || !stripeConfigured.value) {
+      stripeClientSecret.value = ''
+      stripeReady.value = false
+      return
+    }
+
+    try {
+      await ensureStripePaymentIntent()
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Could not start card payment.'
+    }
+  },
+)
+
+function validateForm() {
   nameError.value = ''
   contactError.value = ''
   phoneError.value = ''
@@ -52,7 +128,7 @@ async function handleSubmit() {
 
   if (!name.value.trim()) {
     nameError.value = 'Please enter your name.'
-    return
+    return false
   }
 
   const phoneValue = normalizePhone(phone.value)
@@ -60,68 +136,84 @@ async function handleSubmit() {
 
   if (!hasContactMethod(phoneValue, emailValue)) {
     contactError.value = 'Enter a phone number or email so we can reach you.'
-    return
+    return false
   }
 
   if (phoneValue && !isValidPhone(phoneValue)) {
     phoneError.value = 'Enter a valid 10-digit phone number.'
-    return
+    return false
   }
 
   if (emailValue && !isValidEmail(emailValue)) {
     emailError.value = 'Enter a valid email address.'
-    return
+    return false
   }
+
+  return true
+}
+
+async function completeStripeOrder(paymentIntentId: string) {
+  const verified = await $fetch<{
+    orderId: string
+    customerName: string
+    phone?: string
+    email?: string
+    notes?: string
+    items: Parameters<typeof placeOrder>[0]['items']
+    subtotal: number
+    tax: number
+    total: number
+    stripePaymentIntentId: string
+  }>('/api/stripe/verify', { query: { payment_intent: paymentIntentId } })
+
+  const order = await placeOrder({
+    id: verified.orderId,
+    customerName: verified.customerName,
+    phone: verified.phone,
+    email: verified.email,
+    items: verified.items,
+    subtotal: verified.subtotal,
+    tax: verified.tax,
+    total: verified.total,
+    notes: verified.notes,
+    paymentMethod: 'stripe',
+    stripePaymentIntentId: verified.stripePaymentIntentId,
+  })
+
+  clearCart()
+  await navigateTo(`/waiting/${order.id}`)
+}
+
+async function handleSubmit() {
+  if (!validateForm()) return
 
   error.value = ''
   submitting.value = true
 
   try {
-    const orderItems = lines.value.map(({ item, quantity }) => ({
-      menuItemId: item.id,
-      name: item.name,
-      price: item.price,
-      quantity,
-    }))
-
-    const contact = {
-      phone: phoneValue || undefined,
-      email: emailValue || undefined,
-    }
-
     if (paymentMethod.value === 'stripe') {
-      if (!stripeConfigured.value) {
-        error.value = 'Stripe is not configured yet. Add your keys to .env and restart the dev server.'
+      if (!stripeClientSecret.value) {
+        await ensureStripePaymentIntent()
+      }
+
+      if (!stripeForm.value) {
+        error.value = 'Card form is still loading. Please wait a moment.'
         return
       }
 
-      const orderId = crypto.randomUUID()
-      const { url } = await $fetch<{ url: string }>('/api/stripe/checkout', {
-        method: 'POST',
-        body: {
-          orderId,
-          customerName: name.value.trim(),
-          ...contact,
-          notes: notes.value.trim() || undefined,
-          items: orderItems,
-          subtotal: subtotal.value,
-          tax: tax.value,
-          total: total.value,
-        },
-      })
+      if (!stripeReady.value) {
+        error.value = 'Card form is still loading. Please wait a moment.'
+        return
+      }
 
-      window.location.href = url
+      const returnUrl = `${window.location.origin}/checkout/success?payment_intent={PAYMENT_INTENT_ID}`
+      const paymentIntentId = await stripeForm.value.confirm(returnUrl)
+      await completeStripeOrder(paymentIntentId)
       return
     }
 
     const order = await placeOrder({
-      customerName: name.value.trim(),
-      ...contact,
-      items: orderItems,
-      subtotal: subtotal.value,
-      tax: tax.value,
-      total: total.value,
-      notes: notes.value.trim() || undefined,
+      ...buildOrderPayload(),
       paymentMethod: paymentMethod.value,
     })
     clearCart()
@@ -133,19 +225,25 @@ async function handleSubmit() {
   }
 }
 
-const canSubmit = computed(
-  () =>
-    name.value.trim() &&
-    hasContactMethod(phone.value, email.value) &&
-    (!phone.value.trim() || isValidPhone(phone.value)) &&
-    (!email.value.trim() || isValidEmail(normalizeEmail(email.value))),
-)
-
 const submitLabel = computed(() => {
-  if (submitting.value) return 'Processing…'
-  if (paymentMethod.value === 'stripe') return `Pay with Stripe · ${formatMoney(total.value)}`
+  if (submitting.value) {
+    return paymentMethod.value === 'stripe' ? 'Confirming payment…' : 'Placing order…'
+  }
+  if (paymentMethod.value === 'stripe') return `Pay ${formatMoney(total.value)}`
   return `Place order · ${formatMoney(total.value)}`
 })
+
+const submittingMessage = computed(() =>
+  paymentMethod.value === 'stripe' ? 'Confirming your payment…' : 'Placing your order…',
+)
+
+const stripeSubmitDisabled = computed(
+  () =>
+    submitting.value
+    || !canSubmit.value
+    || stripeLoading.value
+    || (Boolean(stripeClientSecret.value) && !stripeReady.value),
+)
 </script>
 
 <template>
@@ -283,6 +381,21 @@ const submitLabel = computed(() => {
             </span>
           </button>
         </div>
+
+        <div v-if="paymentMethod === 'stripe' && stripeConfigured" class="mt-4 border-t border-black/5 pt-4">
+          <p class="mb-3 text-sm font-medium">Card details</p>
+          <CheckoutStripePaymentForm
+            v-if="stripeClientSecret"
+            ref="stripeForm"
+            :client-secret="stripeClientSecret"
+            @ready="stripeReady = true"
+            @loading="stripeReady = false"
+          />
+          <p v-else-if="canSubmit && stripeLoading" class="text-sm text-black/45">Preparing secure payment…</p>
+          <p v-else-if="!canSubmit" class="text-sm text-black/45">
+            Enter your name and contact info to load the card form.
+          </p>
+        </div>
       </UiCard>
 
       <UiCard class="p-4">
@@ -309,9 +422,24 @@ const submitLabel = computed(() => {
         </div>
       </UiCard>
 
-      <UiButton type="submit" full-width :disabled="submitting || !canSubmit">
+      <UiButton
+        type="submit"
+        full-width
+        :disabled="paymentMethod === 'stripe' ? stripeSubmitDisabled : submitting || !canSubmit"
+      >
         {{ submitLabel }}
       </UiButton>
     </form>
+
+    <div
+      v-if="submitting"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-brand-cream/80 px-4 backdrop-blur-sm"
+      aria-busy="true"
+      aria-label="Processing order"
+    >
+      <UiCard class="w-full max-w-xs p-8 shadow-xl">
+        <UiLoader :label="submittingMessage" size="lg" />
+      </UiCard>
+    </div>
   </div>
 </template>

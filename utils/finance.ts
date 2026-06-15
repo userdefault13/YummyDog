@@ -1,4 +1,5 @@
 import type { BusinessStats, Expense, Order, Transaction } from '~/types'
+import { computeKitchenEfficiency } from '~/utils/orderTiming'
 
 function isToday(iso: string): boolean {
   const d = new Date(iso)
@@ -49,6 +50,7 @@ export function computeStats(
     todayRevenue,
     todayOrders: orders.filter((o) => isToday(o.createdAt)).length,
     topItems,
+    kitchenEfficiency: computeKitchenEfficiency(orders.filter((o) => o.status === 'completed')),
   }
 }
 

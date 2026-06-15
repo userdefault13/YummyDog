@@ -11,6 +11,17 @@ export function normalizePhone(value: string): string {
   return value.trim()
 }
 
+export function phoneDigits(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  return digits.length > 10 ? digits.slice(-10) : digits
+}
+
+export function phonesMatch(a: string, b: string): boolean {
+  const da = phoneDigits(a)
+  const db = phoneDigits(b)
+  return da.length >= 10 && da === db
+}
+
 export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase()
 }

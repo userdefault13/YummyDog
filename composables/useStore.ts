@@ -253,6 +253,16 @@ export function useStore() {
     return updated
   }
 
+  async function refundTransaction(transactionId: string) {
+    const { refund, order } = await $fetch<{ refund: Transaction; order: Order }>(
+      '/api/transactions/refund',
+      { method: 'POST', body: { transactionId } },
+    )
+    transactions.value = [refund, ...transactions.value]
+    orders.value = orders.value.map((o) => (o.id === order.id ? order : o))
+    return { refund, order }
+  }
+
   async function addExpense(input: { label: string; amount: number; category: ExpenseCategory }) {
     const expense: Expense = {
       id: uid(),
@@ -469,6 +479,7 @@ export function useStore() {
     fetchOrder,
     placeOrder,
     updateOrderStatus,
+    refundTransaction,
     addExpense,
     deleteExpense,
     addInventoryItem,

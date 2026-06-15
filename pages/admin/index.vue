@@ -31,14 +31,18 @@ onMounted(() => {
 <template>
   <LayoutAdminHeader :title="title" />
 
-  <nav class="sticky top-[57px] z-10 border-b border-black/5 bg-white">
+  <nav class="sticky top-[65px] z-10 border-b border-black/5 bg-brand-cream/95 backdrop-blur-md">
     <div class="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">
       <button
         v-for="t in TABS"
         :key="t.id"
         type="button"
-        class="shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition"
-        :class="tab === t.id ? 'bg-brand-charcoal text-white' : 'text-black/55 hover:bg-black/5'"
+        class="shrink-0 rounded-xl px-4 py-2 text-sm font-medium transition"
+        :class="
+          tab === t.id
+            ? 'bg-brand-red text-white shadow-md shadow-brand-red/25'
+            : 'text-black/55 hover:bg-black/5 hover:text-brand-charcoal'
+        "
         @click="tab = t.id"
       >
         {{ t.label }}
