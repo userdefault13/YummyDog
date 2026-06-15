@@ -51,7 +51,7 @@ onUnmounted(() => {
   <div class="flex min-h-dvh flex-col bg-brand-charcoal text-white">
     <header class="flex items-center justify-between border-b border-white/10 px-6 py-4">
       <div class="flex items-center gap-3">
-        <span class="text-3xl">🌭</span>
+        <img src="/icon.png" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" width="40" height="40" />
         <div>
           <p class="text-xl font-bold tracking-tight">YummyDog</p>
           <p class="text-sm text-white/50">Ready for pickup</p>

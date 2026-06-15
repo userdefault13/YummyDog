@@ -1,4 +1,4 @@
-const ICON = '/icon.svg'
+const ICON = '/icon.png'
 
 export function useBrowserNotifications() {
   const supported = ref(false)

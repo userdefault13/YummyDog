@@ -26,7 +26,7 @@ function handleSubmit() {
   <div class="flex min-h-dvh flex-col items-center justify-center bg-brand-charcoal px-4">
     <div class="w-full max-w-sm">
       <div class="mb-8 text-center text-white">
-        <span class="text-5xl">🌭</span>
+        <img src="/icon.png" alt="" class="mx-auto h-20 w-20 rounded-full object-cover" width="80" height="80" />
         <h1 class="mt-3 text-2xl font-bold">YummyDog Admin</h1>
         <p class="mt-2 text-sm text-white/50">Sign in to manage orders & finances</p>
       </div>

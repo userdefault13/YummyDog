@@ -31,12 +31,9 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1.0, viewport-fit=cover' },
       ],
       link: [
-        {
-          rel: 'icon',
-          href: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌭</text></svg>",
-        },
+        { rel: 'icon', type: 'image/png', href: '/icon.png' },
         { rel: 'manifest', href: '/manifest.webmanifest' },
-        { rel: 'apple-touch-icon', href: '/icon.svg' },
+        { rel: 'apple-touch-icon', href: '/icon.png' },
       ],
     },
   },

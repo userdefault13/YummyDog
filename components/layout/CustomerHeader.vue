@@ -9,7 +9,7 @@ const onCart = computed(() => route.path === '/cart' || route.path === '/checkou
   <header class="sticky top-0 z-20 border-b border-black/5 bg-brand-cream/95 backdrop-blur-md">
     <div class="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
       <NuxtLink to="/" class="flex items-center gap-2">
-        <span class="text-2xl" aria-hidden>🌭</span>
+        <img src="/icon.png" alt="" class="h-10 w-10 shrink-0 rounded-full object-cover" width="40" height="40" />
         <div>
           <p class="text-lg font-bold leading-tight text-brand-red">YummyDog</p>
           <p class="text-xs text-black/50">Fresh off the grill</p>
