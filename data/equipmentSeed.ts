@@ -48,6 +48,18 @@ export const EQUIPMENT_SEED: EquipmentAsset[] = [
     notes: 'Portable hand washing station for outdoor events',
   },
   {
+    id: 'seed-wancle-handwash-water-heater',
+    name: 'Wancle Sous Vide Immersion Circulator, 1100W IPX7 Waterproof',
+    preset: 'Hand Wash Station',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-22',
+    purchasePrice: 43.99,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes:
+      'ASIN B094921FYY — immersion circulator to hold Honeydak hand wash water at 100°F; 1100W, IPX7 waterproof, reservation timer',
+  },
+  {
     id: 'seed-charbroil-grill',
     name: 'Charbroil Bistro Pro Tabletop Electric Grill, Black',
     preset: 'Grill',

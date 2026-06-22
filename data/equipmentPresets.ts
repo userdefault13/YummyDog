@@ -13,7 +13,12 @@ export type EquipmentPreset = (typeof EQUIPMENT_PRESETS)[number]
 const PRESET_MATCHERS: { preset: EquipmentPreset; keywords: RegExp[] }[] = [
   {
     preset: 'Hand Wash Station',
-    keywords: [/hand\s*wash/i, /wash\s*station/i, /portable\s*sink/i],
+    keywords: [
+      /hand\s*wash/i,
+      /wash\s*station/i,
+      /portable\s*sink/i,
+      /immersion\s*circulator/i,
+    ],
   },
   {
     preset: 'Battery Generator',
