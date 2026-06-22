@@ -36,7 +36,13 @@ const PRESET_MATCHERS: { preset: EquipmentPreset; keywords: RegExp[] }[] = [
   },
   {
     preset: 'Cooler',
-    keywords: [/\bcooler\b/i, /ice\s*chest/i],
+    keywords: [
+      /\bcooler\b/i,
+      /ice\s*chest/i,
+      /fridge\s*battery/i,
+      /cooler\s*battery/i,
+      /detachable\s*battery.*fridge/i,
+    ],
   },
   {
     preset: 'Grill',

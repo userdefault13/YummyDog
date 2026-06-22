@@ -80,6 +80,18 @@ export const EQUIPMENT_SEED: EquipmentAsset[] = [
     salvageValue: 0,
     notes: 'E300 — backup power / solar generator for events',
   },
+  {
+    id: 'seed-bougerv-240wh-cooler-battery',
+    name: 'BougeRV 240Wh Detachable LiFePO4 Battery for Portable Fridge/Cooler',
+    preset: 'Cooler',
+    vendor: 'Amazon',
+    purchaseDate: '2026-06-22',
+    purchasePrice: 179.99,
+    usefulLifeYears: 5,
+    salvageValue: 0,
+    notes:
+      'ASIN B0GHQ54JGF — snap-in 240Wh battery for BougeRV portable car fridges (CRH20, ROCKY V3.0, etc.); LiFePO4, XT60i + USB-C',
+  },
 ].map((asset) => ({
   ...asset,
   preset: asset.preset ?? inferEquipmentPreset(asset.name),
