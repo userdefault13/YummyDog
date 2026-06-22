@@ -263,6 +263,52 @@ export const LICENSING_SEED: LicenseRecord[] = [
     updatedAt: UPDATED_AT,
   },
   {
+    id: 'seed-lb-vending-area-map',
+    jurisdiction: 'City of Long Beach, CA',
+    title: 'Vending Area Map — Where Can You Vend?',
+    category: 'placement',
+    applicableToYummydog: true,
+    effectiveDate: EFFECTIVE_DATE,
+    ordinanceCode: 'LBMC Chapter 5.73',
+    sourceUrl:
+      'https://experience.arcgis.com/experience/0c5ed31ac78b4cc793864521671498fc',
+    sourceDate: SOURCE_DATE,
+    fees: [],
+    requirements: [
+      {
+        label: 'Check location before setup',
+        description:
+          'Use the City interactive map to confirm your intended spot is an eligible vending area before operating.',
+      },
+      {
+        label: 'High-pedestrian zones',
+        description:
+          'Streets marked high or very high volume require 5 ft of clear sidewalk (not 4 ft). See the city high-pedestrian zones map.',
+      },
+    ],
+    restrictions: [],
+    contacts: [
+      {
+        label: 'Interactive vending map',
+        value: 'Open ArcGIS map',
+        href: 'https://experience.arcgis.com/experience/0c5ed31ac78b4cc793864521671498fc',
+      },
+      {
+        label: 'High-pedestrian zones (PDF)',
+        value: 'Download map',
+        href: 'https://www.longbeach.gov/globalassets/finance/media-library/documents/business-info/business-licenses/sidewalk-vending/high-volume-pedestrian-zones-map',
+      },
+      {
+        label: 'Sidewalk vending program',
+        value: 'longbeach.gov/sidewalkvending',
+        href: 'https://longbeach.gov/finance/business-info/business-licenses/sidewalkvending/',
+      },
+    ],
+    notes:
+      'The map identifies high-volume pedestrian zones; it does not mark every prohibited spot. Vendors must verify their setup meets all distance rules in the placement record.',
+    updatedAt: UPDATED_AT,
+  },
+  {
     id: 'seed-lb-recovery-act-program',
     jurisdiction: 'City of Long Beach, CA',
     title: 'Sidewalk Vending Program (Long Beach Recovery Act)',

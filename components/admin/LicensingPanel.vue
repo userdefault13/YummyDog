@@ -63,6 +63,8 @@ async function recordFee(fee: LicenseFee, recordTitle: string) {
       </a>
     </UiCard>
 
+    <AdminVendingAreaVerifier />
+
     <div class="grid gap-3 sm:grid-cols-3">
       <UiCard class="p-4">
         <p class="text-xs uppercase tracking-wide text-black/45">Startup fees (YummyDog)</p>
